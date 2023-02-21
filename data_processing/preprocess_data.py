@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import pickle
@@ -13,6 +14,7 @@ ACC_SR = 32
 HR_SR = 0.5
 SECOND_SR = 1000
 NEW_SR = 25  # Use 25Hz as the sampling rate
+TOTAL_NUM_OF_USERS = 15
 # TODO sliding window approach?
 
 
@@ -39,7 +41,7 @@ def save_tfrecord(data, tfrecord_path):
             writer.write(example.SerializeToString())
 
 
-def preprocess_user_data(user_no):
+def preprocess_user_data(user_no, output_dir):
     # Read in the data
     path = f"../data/S{user_no}/S{user_no}.pkl"
     with open(path, "rb") as f:
@@ -88,17 +90,21 @@ def preprocess_user_data(user_no):
     data.head()
 
     # Save the data
-    data.to_csv(f"../data/processed/S{user_no}.csv", index=False)
+    output_csv_path = os.path.join(output_dir, f"S{user_no}.csv")
+    data.to_csv(output_csv_path, index=False)
 
     # Save as TFRecord as well
-    tfrecord_path = f"../data/processed/S{user_no}.tfrecord"
-    save_tfrecord(data, tfrecord_path)
+    output_tfrecord_path = os.path.join(output_dir, f"S{user_no}.tfrecord")
+    save_tfrecord(data, output_tfrecord_path)
     # The code below doesn't work
-    # tfrecord_folder = f"../data/processed/S{user_no}/"
-    # os.makedirs(tfrecord_folder, exist_ok=True)
-    # pd2tf(data, tfrecord_folder)
+    # pd2tf(data, output_dir)
 
 
-for user_no in range(1, 16):
-    logger.info(f"Processing user {user_no}...")
-    preprocess_user_data(user_no)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--users', '-u', nargs='+', type=int, default=range(1, TOTAL_NUM_OF_USERS + 1))
+    parser.add_argument('--output_dir', '-o', type=str, default="../data/processed/")
+    args = parser.parse_args()
+    for user_no in args.users:
+        logger.info(f"Processing user {user_no}...")
+        preprocess_user_data(user_no, args.output_dir)
