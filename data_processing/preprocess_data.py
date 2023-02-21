@@ -1,7 +1,10 @@
 import logging
+import os
 import pickle
 
 import pandas as pd
+import tensorflow as tf
+from pandas_tfrecords import pd2tf
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,23 @@ def resample(df, new_sr):
     df = df.resample(f"{1 / new_sr}S").mean()
     df = df.interpolate(method="linear")
     return df
+
+
+def save_tfrecord(data, tfrecord_path):
+    with tf.io.TFRecordWriter(tfrecord_path) as writer:
+        for row in data.itertuples():
+            example = tf.train.Example(
+                features=tf.train.Features(
+                    feature={
+                        "ACC_x": tf.train.Feature(float_list=tf.train.FloatList(value=[row.ACC_x])),
+                        "ACC_y": tf.train.Feature(float_list=tf.train.FloatList(value=[row.ACC_y])),
+                        "ACC_z": tf.train.Feature(float_list=tf.train.FloatList(value=[row.ACC_z])),
+                        "PPG": tf.train.Feature(float_list=tf.train.FloatList(value=[row.PPG])),
+                        "HR": tf.train.Feature(float_list=tf.train.FloatList(value=[row.Label])),
+                    }
+                )
+            )
+            writer.write(example.SerializeToString())
 
 
 def preprocess_user_data(user_no):
@@ -78,6 +98,14 @@ def preprocess_user_data(user_no):
 
     # Save the data
     data.to_csv(f"../data/processed/S{user_no}.csv", index=False)
+
+    # Save as TFRecord as well
+    tfrecord_path = f"../data/processed/S{user_no}.tfrecord"
+    save_tfrecord(data, tfrecord_path)
+    # The code below doesn't work
+    # tfrecord_folder = f"../data/processed/S{user_no}/"
+    # os.makedirs(tfrecord_folder, exist_ok=True)
+    # pd2tf(data, tfrecord_folder)
 
 
 for user_no in range(1, 16):

@@ -2,3 +2,4 @@ pandas
 numpy
 seaborn
 matplotlib
+pandas-tfrecords==0.1.6
