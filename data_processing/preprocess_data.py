@@ -15,6 +15,8 @@ HR_SR = 0.5
 SECOND_SR = 1000
 NEW_SR = 25  # Use 25Hz as the sampling rate
 TOTAL_NUM_OF_USERS = 15
+
+
 # TODO sliding window approach?
 
 
@@ -39,6 +41,18 @@ def save_tfrecord(data, tfrecord_path):
                 )
             )
             writer.write(example.SerializeToString())
+
+
+def save_output(data, output_dir):
+    # Save the data
+    output_csv_path = os.path.join(output_dir, f"S{user_no}.csv")
+    data.to_csv(output_csv_path, index=False)
+
+    # Save as TFRecord as well
+    output_tfrecord_path = os.path.join(output_dir, f"S{user_no}.tfrecord")
+    save_tfrecord(data, output_tfrecord_path)
+    # The code below doesn't work
+    # pd2tf(data, output_dir)
 
 
 def preprocess_user_data(user_no, output_dir):
@@ -87,17 +101,7 @@ def preprocess_user_data(user_no, output_dir):
 
     # join the data
     data = pd.concat([acc_df, ppg_df, hr_df], axis=1)
-    data.head()
-
-    # Save the data
-    output_csv_path = os.path.join(output_dir, f"S{user_no}.csv")
-    data.to_csv(output_csv_path, index=False)
-
-    # Save as TFRecord as well
-    output_tfrecord_path = os.path.join(output_dir, f"S{user_no}.tfrecord")
-    save_tfrecord(data, output_tfrecord_path)
-    # The code below doesn't work
-    # pd2tf(data, output_dir)
+    save_output(data, output_dir)
 
 
 if __name__ == '__main__':
