@@ -20,13 +20,29 @@ TOTAL_NUM_OF_USERS = 15
 # TODO sliding window approach?
 
 
-def resample(df, new_sr):
+def resample(df: pd.DataFrame, new_sr: int) -> pd.DataFrame:
+    """
+    Resample and linearly interpolate the data to the new sampling rate.
+    Args:
+        df: dataframe with timestamp as index
+        new_sr: new sampling rate
+    Returns:
+        resampled dataframe
+    """
+    # The resampling returns groups of 1 row, so we need to take the mean of the values
+    # to bring it to DataFrame format again
     df = df.resample(f"{1 / new_sr}S").mean()
     df = df.interpolate(method="linear")
     return df
 
 
-def save_tfrecord(data, tfrecord_path):
+def save_tfrecord(data: pd.DataFrame, tfrecord_path: str) -> None:
+    """
+    Save the data as TFRecord
+    Args:
+        data: dataframe with timestamp as index
+        tfrecord_path: save path
+    """
     with tf.io.TFRecordWriter(tfrecord_path) as writer:
         for row in data.itertuples():
             example = tf.train.Example(
@@ -43,7 +59,13 @@ def save_tfrecord(data, tfrecord_path):
             writer.write(example.SerializeToString())
 
 
-def save_output(data, output_dir):
+def save_output(data: pd.DataFrame, output_dir: str) -> None:
+    """
+    Save the data as CSV and TFRecord
+    Args:
+        data: dataframe with timestamp as index
+        output_dir: save path
+    """
     # Save the data
     output_csv_path = os.path.join(output_dir, f"S{user_no}.csv")
     data.to_csv(output_csv_path, index=False)
@@ -55,7 +77,13 @@ def save_output(data, output_dir):
     # pd2tf(data, output_dir)
 
 
-def preprocess_user_data(user_no, output_dir):
+def preprocess_user_data(user_no: int, output_dir: str) -> None:
+    """
+    Preprocess the data for a single user and save results in the output directory.
+    Args:
+        user_no: user index
+        output_dir: output directory
+    """
     # Read in the data
     path = f"../data/S{user_no}/S{user_no}.pkl"
     with open(path, "rb") as f:
