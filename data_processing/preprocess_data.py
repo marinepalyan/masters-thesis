@@ -40,19 +40,20 @@ def save_tfrecord(data: pd.DataFrame, tfrecord_path: str) -> None:
         tfrecord_path: save path
     """
     with tf.io.TFRecordWriter(tfrecord_path) as writer:
-        for row in data.itertuples():
-            example = tf.train.Example(
-                features=tf.train.Features(
-                    feature={
-                        "acc_x": tf.train.Feature(float_list=tf.train.FloatList(value=[row.acc_x])),
-                        "acc_y": tf.train.Feature(float_list=tf.train.FloatList(value=[row.acc_y])),
-                        "acc_z": tf.train.Feature(float_list=tf.train.FloatList(value=[row.acc_z])),
-                        "ppg": tf.train.Feature(float_list=tf.train.FloatList(value=[row.ppg])),
-                        "heart_rate": tf.train.Feature(float_list=tf.train.FloatList(value=[row.label])),
-                    }
-                )
+        # Save entire dataset as one example
+        example = tf.train.Example(
+            features=tf.train.Features(
+                feature={
+                    "acc_x": tf.train.Feature(float_list=tf.train.FloatList(value=data["acc_x"].values)),
+                    "acc_y": tf.train.Feature(float_list=tf.train.FloatList(value=data["acc_y"].values)),
+                    "acc_z": tf.train.Feature(float_list=tf.train.FloatList(value=data["acc_z"].values)),
+                    "ppg": tf.train.Feature(float_list=tf.train.FloatList(value=data["ppg"].values)),
+                    "activity": tf.train.Feature(int64_list=tf.train.Int64List(value=data["activity"].values)),
+                    "heart_rate": tf.train.Feature(float_list=tf.train.FloatList(value=data["label"].values)),
+                }
             )
-            writer.write(example.SerializeToString())
+        )
+        writer.write(example.SerializeToString())
 
 
 def save_output(data: pd.DataFrame, output_dir: str) -> None:
