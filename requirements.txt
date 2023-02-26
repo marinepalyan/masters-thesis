@@ -1,0 +1,6 @@
+pandas
+numpy
+seaborn
+matplotlib
+pandas-tfrecords==0.1.6
+scipy~=1.10.1
