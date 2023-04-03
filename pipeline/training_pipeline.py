@@ -1,68 +1,81 @@
-import os
-
 import tensorflow as tf
+import argparse
+from typing import List, Callable
+import numpy as np
 
-input_shape = (1500, 4)
+SAMPLE_SIZE = 1500
+input_shape = (SAMPLE_SIZE, 4)
 epochs = 10
+TOTAL_NUM_OF_USERS = 15
 
 
-def transform_dataset(features, label):
-    # Generate a random number between 0 and 1400 inclusive
-    n = tf.random.uniform([], maxval=1400, dtype=tf.int32)
+def apply_to_keys(keys: List[str], func: Callable):
+    def apply_to_keys_fn(dataset):
+        for key in keys:
+            dataset[key] = func(dataset[key])
+        return dataset
+    return apply_to_keys_fn
+
+
+# specify to do this only when training
+# how much future is useful? e.g. 1-minute data into the future
+# after a while start losing past data and results get worse
+# use not the last label, but in the middle, or 75th percentile
+def fill_zeros(features, training: bool = True):
+    if not training:
+        return features
+    prob_to_run = tf.random.uniform([], maxval=4, dtype=tf.int32)
+    # If the number is 0, then run the transform
+    if prob_to_run != 0:
+        return features
+    # Generate a random number between 0 and 1250 inclusive
+    n = tf.random.uniform([], maxval=1250, dtype=tf.int32)
     # Assign the first n values to zeros
-    features = tf.concat([tf.zeros([n]), features[n:]], axis=0)
-    return features, label
+    def slice_zeros_wrapper(column):
+        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [SAMPLE_SIZE - n])], axis=0)
+    features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
+                                func=slice_zeros_wrapper)(features)
+    features = tf.concat(features, axis=0)
+    return features
+
+
+def choose_label(label):
+    return tf.slice(label, [-1], [1])
 
 
 # Define a function to parse each example in the TFRecord file
 def parse_example(example_proto):
     feature_description = {
-        "acc_x": tf.io.FixedLenFeature([], tf.float32),
-        "acc_y": tf.io.FixedLenFeature([], tf.float32),
-        "acc_z": tf.io.FixedLenFeature([], tf.float32),
-        "ppg": tf.io.FixedLenFeature([], tf.float32),
-        "activity": tf.io.FixedLenFeature([], tf.int64),
-        "heart_rate": tf.io.FixedLenFeature([], tf.float32)
+        "acc_x": tf.io.VarLenFeature(tf.float32),
+        "acc_y": tf.io.VarLenFeature(tf.float32),
+        "acc_z": tf.io.VarLenFeature(tf.float32),
+        "ppg": tf.io.VarLenFeature(tf.float32),
+        "activity": tf.io.VarLenFeature(tf.int64),
+        "heart_rate": tf.io.VarLenFeature(tf.float32)
     }
     example = tf.io.parse_single_example(example_proto, feature_description)
     return example
-    features = [example['acc_x'], example['acc_y'], example['acc_z'], example['ppg']]
-    label = example['heart_rate']
+
+
+def sample_dataset(dataset):
+    # TODO fix maxval
+    # print(tf.shape(dataset['acc_x']))
+    n = tf.random.uniform([], maxval=10000 - SAMPLE_SIZE - 1, dtype=tf.int32)
+    def slice_wrapper(column):
+        return tf.slice(column, [n], [SAMPLE_SIZE])
+    dataset = dataset.repeat(1000).map(apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate'],
+                                                 func=slice_wrapper))
+    dataset = tf.concat(dataset, axis=0)
+    return dataset
+
+
+def separate_features_label(dataset):
+    return dataset
+    print(dataset['acc_x'])
+    print(dataset['heart_rate'])
+    features = dataset['acc_x']
+    label = dataset['heart_rate']
     return features, label
-
-
-def sample_dataset(dataset):
-    # take 1500 rows of data
-    data_list = dataset.shuffle(10000).take(1500)
-    # Extract the features and labels
-    features = [data[0] for data in data_list]
-    labels = [data[1] for data in data_list]
-
-    # Sample 1500 rows of data
-    features = features[:1500]
-    last_label = labels[-1]
-
-    # Return the sampled features and final label
-    return features, last_label
-
-
-def sample_dataset(dataset):
-    # Create a buffer size for shuffling the dataset
-    buffer_size = tf.data.experimental.cardinality(dataset).numpy()
-
-    # Shuffle the dataset and take 1500 rows
-    dataset = dataset.shuffle(buffer_size=buffer_size).take(1500)
-
-    # Extract the features and labels from the dataset
-    features, labels = [], []
-    for feature, label in dataset.as_numpy_iterator():
-        features.append(feature)
-
-    # Set the final label as the label of the last row
-    last_label = labels[-1]
-
-    # Return the sampled features and final label
-    return features, last_label
 
 
 def create_model():
@@ -77,19 +90,33 @@ def create_model():
 
 
 # Define the main function
-def main():
-    # Create a TensorFlow dataset from a TFRecord file
-    # Load the TFRecord file into a dataset
-    if not os.path.exists('../data/processed/S1.tfrecord'):
-        raise FileNotFoundError('TFRecord file not found')
-
+def main(input_files: List):
     # Load TFRecord dataset
-    dataset = tf.data.TFRecordDataset('../data/processed/S1.tfrecord')
+    dataset = tf.data.TFRecordDataset(input_files)
 
     # Map each example to its features and label
     dataset = dataset.map(parse_example)
+    dataset = dataset.map(apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg',
+                                              'activity', 'heart_rate'], func=tf.sparse.to_dense))
+
     dataset = sample_dataset(dataset)
-    dataset = dataset.map(transform_dataset)
+    for e in dataset.as_numpy_iterator():
+        print(e)
+        break
+    # Expected begin[0] == 0 (got 681) and size[0] == 0 (got 1500) when input.dim_size(0) == 0
+    features, label = dataset.map(separate_features_label)
+    features = features.map(fill_zeros)
+    for e in features.as_numpy_iterator():
+        print(e)
+        break
+    label = label.map(choose_label)
+    for e in label.as_numpy_iterator():
+        print(e)
+        break
+    dataset = tf.data.Dataset.zip((features, label))
+    dataset = dataset.batch(32)
+    # bool argument to decide whether to do augmentations: training = False
+    # lambda x: fill_zeros(x, training=training)
 
     # Create the TensorFlow model and compile it
     model = create_model()
@@ -98,4 +125,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--users', '-u', nargs='+', type=int, default=range(1, TOTAL_NUM_OF_USERS + 1))
+    args = parser.parse_args()
+    input_files = [f'../data/processed/S{user}.tfrecord' for user in args.users]
+    main(input_files)
