@@ -1,8 +1,11 @@
 import argparse
+import os
 from typing import List, Callable
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
+from models.dense import create_model
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
@@ -40,7 +43,7 @@ def fill_zeros(features, label, training: bool = True):
         return tf.concat([tf.zeros([n]), tf.slice(column, [n], [SAMPLE_SIZE - n])], axis=0)
 
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
-                             func=slice_zeros_wrapper)(features)
+                             func=slice_zeros_wrapper)(features, training)
     return features, label
 
 
@@ -88,17 +91,6 @@ def separate_features_label(dataset, training: bool):
     features = dataset.copy()
     label = {"heart_rate": features.pop('heart_rate')}
     return features, label
-
-
-def create_model():
-    model = tf.keras.Sequential([
-        tf.keras.layers.Dense(32, activation='relu', input_shape=input_shape),
-        tf.keras.layers.Dense(1)
-    ])
-    # Compile the model
-    model.compile(optimizer='adam', loss='mse')
-    print(model.summary())
-    return model
 
 
 def build_dataset(ds, transforms, training=False):
