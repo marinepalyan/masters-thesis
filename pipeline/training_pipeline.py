@@ -2,6 +2,7 @@ import tensorflow as tf
 import argparse
 from typing import List, Callable
 import numpy as np
+from pprint import pprint
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
@@ -10,10 +11,10 @@ TOTAL_NUM_OF_USERS = 15
 
 
 def apply_to_keys(keys: List[str], func: Callable):
-    def apply_to_keys_fn(dataset):
+    def apply_to_keys_fn(example):
         for key in keys:
-            dataset[key] = func(dataset[key])
-        return dataset
+            example[key] = func(example[key])
+        return example
     return apply_to_keys_fn
 
 
@@ -21,13 +22,15 @@ def apply_to_keys(keys: List[str], func: Callable):
 # how much future is useful? e.g. 1-minute data into the future
 # after a while start losing past data and results get worse
 # use not the last label, but in the middle, or 75th percentile
-def fill_zeros(features, training: bool = True):
+def fill_zeros(features, label, training: bool = True):
     if not training:
-        return features
-    prob_to_run = tf.random.uniform([], maxval=4, dtype=tf.int32)
+        return features, label
+    prob_to_run = np.random.randint(0, 4)
     # If the number is 0, then run the transform
-    if prob_to_run != 0:
-        return features
+    print(prob_to_run)
+    if prob_to_run == 0:
+        return features, label
+    print("success")
     # Generate a random number between 0 and 1250 inclusive
     n = tf.random.uniform([], maxval=1250, dtype=tf.int32)
     # Assign the first n values to zeros
@@ -35,12 +38,20 @@ def fill_zeros(features, training: bool = True):
         return tf.concat([tf.zeros([n]), tf.slice(column, [n], [SAMPLE_SIZE - n])], axis=0)
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
                                 func=slice_zeros_wrapper)(features)
-    features = tf.concat(features, axis=0)
-    return features
+    return features, label
 
 
-def choose_label(label):
-    return tf.slice(label, [-1], [1])
+def choose_label(features, label):
+    return features, label['heart_rate'][-1]
+
+
+def join_features(features, label):
+    features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
+    features = tf.reshape(features, input_shape)
+    print(type(label))
+    print(label)
+    label = tf.reshape(label, (1,))
+    return features, label
 
 
 # Define a function to parse each example in the TFRecord file
@@ -57,24 +68,20 @@ def parse_example(example_proto):
     return example
 
 
-def sample_dataset(dataset):
+def sample_dataset(example):
     # TODO fix maxval
-    # print(tf.shape(dataset['acc_x']))
-    n = tf.random.uniform([], maxval=10000 - SAMPLE_SIZE - 1, dtype=tf.int32)
-    def slice_wrapper(column):
-        return tf.slice(column, [n], [SAMPLE_SIZE])
-    dataset = dataset.repeat(1000).map(apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate'],
-                                                 func=slice_wrapper))
-    dataset = tf.concat(dataset, axis=0)
-    return dataset
+    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - SAMPLE_SIZE - 1, dtype=tf.int32)
+    # tf.print(f"n: {n}")
+    def slice_column(column):
+        return column[start_idx:start_idx + SAMPLE_SIZE]
+    keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
+    example = (apply_to_keys(keys=keys, func=slice_column))(example)
+    return example
 
 
 def separate_features_label(dataset):
-    return dataset
-    print(dataset['acc_x'])
-    print(dataset['heart_rate'])
-    features = dataset['acc_x']
-    label = dataset['heart_rate']
+    features = dataset.copy()
+    label = {"heart_rate": features.pop('heart_rate')}
     return features, label
 
 
@@ -94,26 +101,39 @@ def main(input_files: List):
     # Load TFRecord dataset
     dataset = tf.data.TFRecordDataset(input_files)
 
-    # Map each example to its features and label
     dataset = dataset.map(parse_example)
     dataset = dataset.map(apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg',
                                               'activity', 'heart_rate'], func=tf.sparse.to_dense))
-
-    dataset = sample_dataset(dataset)
+    # for e in dataset.as_numpy_iterator():
+    #     print(e['acc_x'].shape)
+    dataset = dataset.repeat(10000).map(sample_dataset)
+    # for i, e in enumerate(dataset.as_numpy_iterator()):
+    #     print(e['acc_x'].shape)
+    #     if i > 20:
+    #         break
+    dataset = dataset.map(separate_features_label)
+    for features, label in dataset.as_numpy_iterator():
+        pprint(label)
+        print(features['acc_x'].shape)
+        print(label['heart_rate'].shape)
+        break
+    print('before fill zeros')
+    dataset = dataset.map(fill_zeros)
     for e in dataset.as_numpy_iterator():
-        print(e)
+        pprint(e)
         break
-    # Expected begin[0] == 0 (got 681) and size[0] == 0 (got 1500) when input.dim_size(0) == 0
-    features, label = dataset.map(separate_features_label)
-    features = features.map(fill_zeros)
-    for e in features.as_numpy_iterator():
-        print(e)
-        break
-    label = label.map(choose_label)
-    for e in label.as_numpy_iterator():
-        print(e)
-        break
-    dataset = tf.data.Dataset.zip((features, label))
+    dataset = dataset.map(choose_label)
+    dataset = dataset.map(join_features)
+    print("lalalala")
+    print(dataset)
+    # FIXME this is not working
+    # getting an error that the dataset is not iterable
+    # slice index -1 of dimension 0 out of bounds.
+    for (features, label) in dataset.as_numpy_iterator():
+        print(features)
+        print(features.shape)
+        print(label)
+    # dataset = tf.data.Dataset.zip((features, label))
     dataset = dataset.batch(32)
     # bool argument to decide whether to do augmentations: training = False
     # lambda x: fill_zeros(x, training=training)
