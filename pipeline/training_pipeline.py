@@ -1,8 +1,8 @@
-import tensorflow as tf
 import argparse
 from typing import List, Callable
+
 import numpy as np
-from pprint import pprint
+import tensorflow as tf
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
@@ -11,10 +11,11 @@ TOTAL_NUM_OF_USERS = 15
 
 
 def apply_to_keys(keys: List[str], func: Callable):
-    def apply_to_keys_fn(example):
+    def apply_to_keys_fn(example, training: bool):
         for key in keys:
             example[key] = func(example[key])
         return example
+
     return apply_to_keys_fn
 
 
@@ -33,19 +34,21 @@ def fill_zeros(features, label, training: bool = True):
     print("success")
     # Generate a random number between 0 and 1250 inclusive
     n = tf.random.uniform([], maxval=1250, dtype=tf.int32)
+
     # Assign the first n values to zeros
     def slice_zeros_wrapper(column):
         return tf.concat([tf.zeros([n]), tf.slice(column, [n], [SAMPLE_SIZE - n])], axis=0)
+
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
-                                func=slice_zeros_wrapper)(features)
+                             func=slice_zeros_wrapper)(features)
     return features, label
 
 
-def choose_label(features, label):
+def choose_label(features, label, training: bool):
     return features, label['heart_rate'][-1]
 
 
-def join_features(features, label):
+def join_features(features, label, training: bool):
     features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
     features = tf.reshape(features, input_shape)
     print(type(label))
@@ -55,7 +58,7 @@ def join_features(features, label):
 
 
 # Define a function to parse each example in the TFRecord file
-def parse_example(example_proto):
+def parse_example(example_proto, training: bool):
     feature_description = {
         "acc_x": tf.io.VarLenFeature(tf.float32),
         "acc_y": tf.io.VarLenFeature(tf.float32),
@@ -68,18 +71,20 @@ def parse_example(example_proto):
     return example
 
 
-def sample_dataset(example):
+def sample_dataset(example, training: bool):
     # TODO fix maxval
     start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - SAMPLE_SIZE - 1, dtype=tf.int32)
+
     # tf.print(f"n: {n}")
     def slice_column(column):
         return column[start_idx:start_idx + SAMPLE_SIZE]
+
     keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
-    example = (apply_to_keys(keys=keys, func=slice_column))(example)
+    example = (apply_to_keys(keys=keys, func=slice_column))(example, training)
     return example
 
 
-def separate_features_label(dataset):
+def separate_features_label(dataset, training: bool):
     features = dataset.copy()
     label = {"heart_rate": features.pop('heart_rate')}
     return features, label
@@ -96,57 +101,54 @@ def create_model():
     return model
 
 
-# Define the main function
-def main(input_files: List):
-    # Load TFRecord dataset
-    dataset = tf.data.TFRecordDataset(input_files)
-
-    dataset = dataset.map(parse_example)
-    dataset = dataset.map(apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg',
-                                              'activity', 'heart_rate'], func=tf.sparse.to_dense))
-    # for e in dataset.as_numpy_iterator():
-    #     print(e['acc_x'].shape)
-    dataset = dataset.repeat(10000).map(sample_dataset)
-    # for i, e in enumerate(dataset.as_numpy_iterator()):
-    #     print(e['acc_x'].shape)
-    #     if i > 20:
-    #         break
-    dataset = dataset.map(separate_features_label)
-    for features, label in dataset.as_numpy_iterator():
-        pprint(label)
-        print(features['acc_x'].shape)
-        print(label['heart_rate'].shape)
-        break
-    print('before fill zeros')
-    dataset = dataset.map(fill_zeros)
-    for e in dataset.as_numpy_iterator():
-        pprint(e)
-        break
-    dataset = dataset.map(choose_label)
-    dataset = dataset.map(join_features)
-    print("lalalala")
-    print(dataset)
+def build_dataset(ds, transforms, training=False):
+    ds = ds.cache().repeat(10000)
+    for transform in transforms[0]:
+        ds = ds.map(lambda x: transform(x, training=training))
+    for transform in transforms[1]:
+        ds = ds.map(lambda x, y: transform(x, y, training=training))
     # FIXME this is not working
     # getting an error that the dataset is not iterable
     # slice index -1 of dimension 0 out of bounds.
-    for (features, label) in dataset.as_numpy_iterator():
+    for (features, label) in ds.as_numpy_iterator():
         print(features)
         print(features.shape)
         print(label)
-    # dataset = tf.data.Dataset.zip((features, label))
-    dataset = dataset.batch(32)
-    # bool argument to decide whether to do augmentations: training = False
-    # lambda x: fill_zeros(x, training=training)
+    return ds
+
+
+# Define the main function
+def main(input_files: List, test_size: float):
+    test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
+    train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
+    test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
+    transforms = [
+        [
+            parse_example,
+            apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'activity', 'heart_rate'], func=tf.sparse.to_dense),
+            sample_dataset,
+            separate_features_label],
+        [
+            fill_zeros,
+            choose_label,
+            join_features
+        ]
+    ]
+    train_ds = build_dataset(train_dataset, transforms, training=True)
+    test_ds = build_dataset(test_dataset, transforms, training=False)
+
+    train_ds = train_ds.shuffle(100).batch(32)
+    test_ds = test_ds.batch(32)
 
     # Create the TensorFlow model and compile it
     model = create_model()
     # Train the model on the transformed dataset
-    model.fit(dataset, epochs=epochs)
+    model.fit(train_ds, steps_per_epoch=1000, epochs=100, validation_data=test_ds, validation_steps=1000)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--users', '-u', nargs='+', type=int, default=range(1, TOTAL_NUM_OF_USERS + 1))
+    parser.add_argument('--test_size', type=float, default=0.2)
     args = parser.parse_args()
-    input_files = [f'../data/processed/S{user}.tfrecord' for user in args.users]
-    main(input_files)
+    input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
+    main(input_files, args.test_size)
