@@ -1,13 +1,4 @@
 import tensorflow as tf
-def create_model_():
-    model = tf.keras.Sequential([
-        tf.keras.layers.Dense(32, activation='relu', input_shape=input_shape),
-        tf.keras.layers.Dense(1)
-    ])
-    # Compile the model
-    model.compile(optimizer='adam', loss='mse')
-    print(model.summary())
-    return model
 
 
 class DenseModel(tf.keras.Model):

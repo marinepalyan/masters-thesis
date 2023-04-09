@@ -5,7 +5,7 @@ from typing import List, Callable
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
-from models.dense import create_model
+from models import get_model
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
@@ -31,10 +31,8 @@ def fill_zeros(features, label, training: bool = True):
         return features, label
     prob_to_run = np.random.randint(0, 4)
     # If the number is 0, then run the transform
-    print(prob_to_run)
     if prob_to_run == 0:
         return features, label
-    print("success")
     # Generate a random number between 0 and 1250 inclusive
     n = tf.random.uniform([], maxval=1250, dtype=tf.int32)
 
@@ -54,9 +52,7 @@ def choose_label(features, label, training: bool):
 def join_features(features, label, training: bool):
     features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
     features = tf.reshape(features, input_shape)
-    print(type(label))
-    print(label)
-    label = tf.reshape(label, (1,))
+    # label = tf.reshape(label, (1,))
     return features, label
 
 
@@ -133,7 +129,7 @@ def main(input_files: List, test_size: float):
     test_ds = test_ds.batch(32)
 
     # Create the TensorFlow model and compile it
-    model = create_model()
+    model = get_model('dense', input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=1000, epochs=100, validation_data=test_ds, validation_steps=1000)
 
