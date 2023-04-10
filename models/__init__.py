@@ -2,10 +2,12 @@ from typing import Tuple
 
 import tensorflow as tf
 
-from .dense import DenseModel
+from .dense import get_dense_model
+from .tcn import get_tcn_model
 
 MODELS = {
-    'dense': DenseModel
+    'dense': get_dense_model,
+    'tcn': get_tcn_model,
 }
 
 
@@ -15,6 +17,5 @@ def get_model(model_name: str, input_shape: Tuple[int, int],
         raise ValueError(f"Model {model_name} not found. Must be one of {list(MODELS.keys())}")
     model = MODELS[model_name](input_shape)
     model.compile(optimizer=optimizer, loss=loss)
-    model.build(input_shape)
     print(model.summary())
     return model
