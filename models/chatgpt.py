@@ -1,13 +1,9 @@
-"""
-The following model is an implemetation of the architecture described in the paper:
-Deep PPG: Large-Scale Heart Rate Estimation with Convolutional Neural Networks
-Reference: https://www.mdpi.com/1424-8220/19/14/3079
-"""
-import tensorflow as tf
 from typing import Tuple
 
+import tensorflow as tf
 
-def get_deep_ppg_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
+
+def get_chatgpt_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
     inputs = tf.keras.Input(shape=input_shape)
     x = tf.keras.layers.Conv1D(32, kernel_size=5, activation='relu')(inputs)
     x = tf.keras.layers.BatchNormalization()(x)
