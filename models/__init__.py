@@ -6,12 +6,14 @@ from .dense import get_dense_model
 from .tcn import get_tcn_model
 from .chatgpt import get_chatgpt_model
 from .deep_ppg import get_deep_ppg_model
+from .wavenet import get_wavenet_model
 
 MODELS = {
     'dense': get_dense_model,
     'tcn': get_tcn_model,
     'chatgpt': get_chatgpt_model,
     'deep_ppg': get_deep_ppg_model,
+    'wavenet': get_wavenet_model,
 }
 
 
