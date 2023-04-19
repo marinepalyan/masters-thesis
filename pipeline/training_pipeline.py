@@ -90,7 +90,7 @@ def separate_features_label(dataset, training: bool):
 
 
 def build_dataset(ds, transforms, training=False):
-    ds = ds.cache().repeat(10000)
+    ds = ds.cache().repeat()
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
     for transform in transforms[1]:
@@ -98,7 +98,7 @@ def build_dataset(ds, transforms, training=False):
     # FIXME this is not working
     # getting an error that the dataset is not iterable
     # slice index -1 of dimension 0 out of bounds.
-    for (features, label) in ds.as_numpy_iterator():
+    for features, label in ds.take(5):
         print(features)
         print(features.shape)
         print(label)
@@ -129,7 +129,7 @@ def main(input_files: List, test_size: float):
     test_ds = test_ds.batch(32)
 
     # Create the TensorFlow model and compile it
-    model = get_model('dense', input_shape)
+    model = get_model('tcn', input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=1000, epochs=100, validation_data=test_ds, validation_steps=1000)
 

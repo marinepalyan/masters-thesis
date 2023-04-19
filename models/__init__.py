@@ -22,6 +22,6 @@ def get_model(model_name: str, input_shape: Tuple[int, int],
     if model_name not in MODELS:
         raise ValueError(f"Model {model_name} not found. Must be one of {list(MODELS.keys())}")
     model = MODELS[model_name](input_shape)
-    model.compile(optimizer=optimizer, loss=loss)
+    model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
     print(model.summary())
     return model

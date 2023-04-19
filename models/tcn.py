@@ -57,7 +57,7 @@ def cnn_tcn(nr_features: int,
             dropout_layer = tf.keras.layers.Dropout(dense_drop_rate, name=f'{name}_dropout')
             x = dense_layer(x)
             x = dropout_layer(x)
-    output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name='output')
+    output_layer = tf.keras.layers.Dense(1, name='output')
     output_l = output_layer(x)
     return tf.keras.Model(input_l, output_l)
 
@@ -76,11 +76,11 @@ def get_tcn_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
                     (first_layer_sz * 8, 3, 1),
                     (first_layer_sz * 8, 3, 2),
                     (first_layer_sz * 8, 3, 2)],
-        tcn_layers=[],
-        # tcn_layers=[(first_layer_sz * 8, 2),
-        #             (first_layer_sz * 8, 2),
-        #             (first_layer_sz * 8, 2),
-        #             (first_layer_sz * 16, 2)],
+        # tcn_layers=[],
+        tcn_layers=[(first_layer_sz * 8, 2),
+                    (first_layer_sz * 8, 2),
+                    (first_layer_sz * 8, 2),
+                    (first_layer_sz * 16, 2)],
         tcn_dilation=3,
         spatial_drop_rate=0.05,
         dense_drop_rate=0.2,
