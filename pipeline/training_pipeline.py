@@ -2,15 +2,19 @@ import argparse
 import os
 from typing import List, Callable
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
 from models import get_model
+import tensorflow_probability as tfp
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
 epochs = 10
 TOTAL_NUM_OF_USERS = 15
+SCALE = 5
+HR_GRID = list(range(30, 230, 1))
 
 
 def apply_to_keys(keys: List[str], func: Callable):
@@ -47,6 +51,27 @@ def fill_zeros(features, label, training: bool = True):
 
 def choose_label(features, label, training: bool):
     return features, label['heart_rate'][-1]
+
+
+def int_label(features, label, training: bool):
+    return features, tf.cast(label, tf.int32)
+
+
+def one_hot_label(features, label, training: bool):
+    label = tf.cast(label, tf.int32)
+    return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
+
+
+def normal_dist_label(features, label, training: bool):
+    label = tf.cast(label, tf.int32)
+    normal_distribution = tfp.distributions.Normal(loc=label, scale=SCALE)
+    return features, normal_distribution.prob(HR_GRID)
+
+
+def cauchy_dist_label(features, label, training: bool):
+    label = tf.cast(label, tf.int32)
+    cauchy_distribution = tfp.distributions.Cauchy(loc=label, scale=SCALE)
+    return features, cauchy_distribution.prob(HR_GRID)
 
 
 def join_features(features, label, training: bool):
