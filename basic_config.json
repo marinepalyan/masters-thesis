@@ -1,0 +1,9 @@
+{
+  "scale": 5,
+  "epochs": 10,
+  "model_name": "dense",
+  "model_type": "regression",
+  "batch_size": 32,
+  "steps_per_epoch": 1000,
+  "validation_steps": 100
+}

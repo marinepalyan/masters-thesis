@@ -1,20 +1,47 @@
 import argparse
+import json
 import os
 from typing import List, Callable
 
 import numpy as np
 import tensorflow as tf
-from models import get_model
 import tensorflow_probability as tfp
+
+from models import get_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 SAMPLE_SIZE = 1500
 input_shape = (SAMPLE_SIZE, 4)
-epochs = 10
 TOTAL_NUM_OF_USERS = 15
-SCALE = 5
 HR_GRID = list(range(30, 230, 1))
+
+SCALE = None
+EPOCHS = None
+MODEL_NAME = None
+MODEL_TYPE = None
+BATCH_SIZE = None
+STEPS_PER_EPOCH = None
+VALIDATION_STEPS = None
+
+
+def set_config(config_file):
+    with open(config_file) as f:
+        config = json.load(f)
+    global EPOCHS
+    EPOCHS = config['epochs']
+    global SCALE
+    SCALE = config['scale']
+    global MODEL_NAME
+    MODEL_NAME = config['model_name']
+    global MODEL_TYPE
+    MODEL_TYPE = config['model_type']
+    global BATCH_SIZE
+    BATCH_SIZE = config['batch_size']
+    global STEPS_PER_EPOCH
+    STEPS_PER_EPOCH = config['steps_per_epoch']
+    global VALIDATION_STEPS
+    VALIDATION_STEPS = config['validation_steps']
 
 
 def apply_to_keys(keys: List[str], func: Callable):
@@ -151,17 +178,23 @@ def main(input_files: List, test_size: float):
     test_ds = build_dataset(test_dataset, transforms, training=False)
 
     train_ds = train_ds.shuffle(100).batch(32)
-    test_ds = test_ds.batch(32)
+    test_ds = test_ds.batch(BATCH_SIZE)
 
     # Create the TensorFlow model and compile it
-    model = get_model('tcn', input_shape)
+    model = get_model(MODEL_NAME, input_shape)
     # Train the model on the transformed dataset
-    model.fit(train_ds, steps_per_epoch=1000, epochs=100, validation_data=test_ds, validation_steps=1000)
+    model.fit(train_ds, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS,
+              validation_data=test_ds, validation_steps=VALIDATION_STEPS)
+
+    save_path = f'{MODEL_NAME}_{MODEL_TYPE}.ckpt'
+    model.save_weights(save_path)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--test_size', type=float, default=0.2)
+    parser.add_argument('--config_path', type=str, default='../basic_config.json')
     args = parser.parse_args()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
+    set_config(args.config_path)
     main(input_files, args.test_size)
