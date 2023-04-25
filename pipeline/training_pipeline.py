@@ -6,8 +6,10 @@ from typing import List, Callable
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from datetime import datetime
+import keras
 
-from models import get_model
+from models import get_model, MODELS
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -23,6 +25,12 @@ MODEL_TYPE = None
 BATCH_SIZE = None
 STEPS_PER_EPOCH = None
 VALIDATION_STEPS = None
+
+LOGDIR = '../logs/{}_{}.txt'
+# create a SummaryWriter object
+summary_writer = tf.summary.create_file_writer('../logs/summary/')
+
+
 
 
 def set_config(config_file):
@@ -159,6 +167,8 @@ def build_dataset(ds, transforms, training=False):
 
 # Define the main function
 def main(input_files: List, test_size: float):
+    tensorboard_callback = keras.callbacks.TensorBoard(
+        log_dir=LOGDIR.format(MODEL_NAME, datetime.now().strftime("%Y%m%d-%H%M%S")))
     test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
     train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
     test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
@@ -184,7 +194,23 @@ def main(input_files: List, test_size: float):
     model = get_model(MODEL_NAME, input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS,
-              validation_data=test_ds, validation_steps=VALIDATION_STEPS)
+              validation_data=test_ds, validation_steps=VALIDATION_STEPS,
+              callbacks=[tensorboard_callback])
+
+    # add a visualization of your model's graph to the summary
+    with summary_writer.as_default():
+        tf.summary.trace_on(graph=True, profiler=True)
+        model(tf.zeros([1, input_shape[0], input_shape[1]]))
+        tf.summary.trace_export(name="model_trace", step=0, profiler_outdir="./logs")
+
+    # evaluate the model on the validation set
+    val_loss, val_mae, val_mse = model.evaluate(test_ds, steps=VALIDATION_STEPS)
+
+    # save the training summary
+    with summary_writer.as_default():
+        tf.summary.scalar('loss', val_loss, step=STEPS_PER_EPOCH)
+        tf.summary.scalar('mae', val_mae, step=STEPS_PER_EPOCH)
+        tf.summary.scalar('mse', val_mse, step=STEPS_PER_EPOCH)
 
     save_path = f'{MODEL_NAME}_{MODEL_TYPE}.ckpt'
     model.save_weights(save_path)
@@ -197,4 +223,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
-    main(input_files, args.test_size)
+    for model in MODELS.keys():
+        MODEL_NAME = model
+        main(input_files, args.test_size)
+
+    # close the SummaryWriter object
+    summary_writer.close()
+
