@@ -18,38 +18,17 @@ input_shape = (SAMPLE_SIZE, 4)
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 
-SCALE = None
-EPOCHS = None
-MODEL_NAME = None
-MODEL_TYPE = None
-BATCH_SIZE = None
-STEPS_PER_EPOCH = None
-VALIDATION_STEPS = None
+CONFIG = {}
 
 LOGDIR = '../logs/{}_{}.txt'
 # create a SummaryWriter object
 summary_writer = tf.summary.create_file_writer('../logs/summary/')
 
 
-
-
 def set_config(config_file):
+    global CONFIG
     with open(config_file) as f:
-        config = json.load(f)
-    global EPOCHS
-    EPOCHS = config['epochs']
-    global SCALE
-    SCALE = config['scale']
-    global MODEL_NAME
-    MODEL_NAME = config['model_name']
-    global MODEL_TYPE
-    MODEL_TYPE = config['model_type']
-    global BATCH_SIZE
-    BATCH_SIZE = config['batch_size']
-    global STEPS_PER_EPOCH
-    STEPS_PER_EPOCH = config['steps_per_epoch']
-    global VALIDATION_STEPS
-    VALIDATION_STEPS = config['validation_steps']
+        CONFIG = json.load(f)
 
 
 def apply_to_keys(keys: List[str], func: Callable):
@@ -99,13 +78,13 @@ def one_hot_label(features, label, training: bool):
 
 def normal_dist_label(features, label, training: bool):
     label = tf.cast(label, tf.int32)
-    normal_distribution = tfp.distributions.Normal(loc=label, scale=SCALE)
+    normal_distribution = tfp.distributions.Normal(loc=label, scale=CONFIG['scale'])
     return features, normal_distribution.prob(HR_GRID)
 
 
 def cauchy_dist_label(features, label, training: bool):
     label = tf.cast(label, tf.int32)
-    cauchy_distribution = tfp.distributions.Cauchy(loc=label, scale=SCALE)
+    cauchy_distribution = tfp.distributions.Cauchy(loc=label, scale=CONFIG['scale'])
     return features, cauchy_distribution.prob(HR_GRID)
 
 
@@ -168,7 +147,7 @@ def build_dataset(ds, transforms, training=False):
 # Define the main function
 def main(input_files: List, test_size: float):
     tensorboard_callback = keras.callbacks.TensorBoard(
-        log_dir=LOGDIR.format(MODEL_NAME, datetime.now().strftime("%Y%m%d-%H%M%S")))
+        log_dir=LOGDIR.format(CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S")))
     test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
     train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
     test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
@@ -188,13 +167,13 @@ def main(input_files: List, test_size: float):
     test_ds = build_dataset(test_dataset, transforms, training=False)
 
     train_ds = train_ds.shuffle(100).batch(32)
-    test_ds = test_ds.batch(BATCH_SIZE)
+    test_ds = test_ds.batch(CONFIG['batch_size'])
 
     # Create the TensorFlow model and compile it
-    model = get_model(MODEL_NAME, input_shape)
+    model = get_model(CONFIG['model_name'], input_shape)
     # Train the model on the transformed dataset
-    model.fit(train_ds, steps_per_epoch=STEPS_PER_EPOCH, epochs=EPOCHS,
-              validation_data=test_ds, validation_steps=VALIDATION_STEPS,
+    model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
+              validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
               callbacks=[tensorboard_callback])
 
     # add a visualization of your model's graph to the summary
@@ -204,15 +183,15 @@ def main(input_files: List, test_size: float):
         tf.summary.trace_export(name="model_trace", step=0, profiler_outdir="./logs")
 
     # evaluate the model on the validation set
-    val_loss, val_mae, val_mse = model.evaluate(test_ds, steps=VALIDATION_STEPS)
+    val_loss, val_mae, val_mse = model.evaluate(test_ds, steps=CONFIG['validation_steps'])
 
     # save the training summary
     with summary_writer.as_default():
-        tf.summary.scalar('loss', val_loss, step=STEPS_PER_EPOCH)
-        tf.summary.scalar('mae', val_mae, step=STEPS_PER_EPOCH)
-        tf.summary.scalar('mse', val_mse, step=STEPS_PER_EPOCH)
+        tf.summary.scalar('loss', val_loss, step=CONFIG['steps_per_epoch'])
+        tf.summary.scalar('mae', val_mae, step=CONFIG['steps_per_epoch'])
+        tf.summary.scalar('mse', val_mse, step=CONFIG['steps_per_epoch'])
 
-    save_path = f'{MODEL_NAME}_{MODEL_TYPE}.ckpt'
+    save_path = f"{CONFIG['model_name']}_{CONFIG['model_type']}.ckpt"
     model.save_weights(save_path)
 
 
@@ -223,8 +202,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
-    for model in MODELS.keys():
-        MODEL_NAME = model
+    for model in ['tcn']:
+        CONFIG['model_name'] = model
         main(input_files, args.test_size)
 
     # close the SummaryWriter object
