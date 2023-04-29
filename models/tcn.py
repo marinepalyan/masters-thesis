@@ -2,6 +2,8 @@ from typing import Optional, Text, Sequence, Tuple
 
 import tensorflow as tf
 
+EXPECTED_INPUT_SHAPE = (1565, 4)
+
 
 def _nx1_conv_block(
         filters: int,
@@ -36,7 +38,9 @@ def cnn_tcn(nr_features: int,
             tcn_dilation: int,
             dense_layers: Sequence[int],
             spatial_drop_rate: float = 0.05,
-            dense_drop_rate: float = 0.1):
+            dense_drop_rate: float = 0.1,
+            output_activation: str = 'relu',
+            num_of_classes: int = 1):
     input_l = x = tf.keras.layers.Input(shape=(seq_len, nr_features), name='input')
     x = tf.keras.layers.Reshape(target_shape=(seq_len, 1, nr_features))(x)
     for l_idx, (filters, kernel_size, pool_size) in enumerate(cnn_layers):
@@ -57,33 +61,39 @@ def cnn_tcn(nr_features: int,
             dropout_layer = tf.keras.layers.Dropout(dense_drop_rate, name=f'{name}_dropout')
             x = dense_layer(x)
             x = dropout_layer(x)
-    output_layer = tf.keras.layers.Dense(1, name='output')
+    output_layer = tf.keras.layers.Dense(num_of_classes, name='output', activation=output_activation)
     output_l = output_layer(x)
     return tf.keras.Model(input_l, output_l)
 
 
 def get_tcn_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
-    first_layer_sz = 16
+    xtr = 6
     model = cnn_tcn(
         nr_features=input_shape[1],
         seq_len=input_shape[0],
-        cnn_layers=[(first_layer_sz * 1, 4, 1),
-                    (first_layer_sz * 1, 3, 2),
-                    (first_layer_sz * 2, 3, 1),
-                    (first_layer_sz * 2, 3, 2),
-                    (first_layer_sz * 4, 3, 1),
-                    (first_layer_sz * 4, 3, 2),
-                    (first_layer_sz * 8, 3, 1),
-                    (first_layer_sz * 8, 3, 2),
-                    (first_layer_sz * 8, 3, 2)],
+        cnn_layers=[
+            (16 + xtr, 4, 1),
+            (22 + xtr, 3, 2),
+            (28 + xtr, 3, 1),
+            (34 + xtr, 3, 2),
+            (40 + xtr, 3, 1),
+            (46 + xtr, 3, 2),
+            (52 + xtr, 3, 1),
+            (58 + xtr, 3, 2),
+            (64 + xtr, 3, 2),
+        ],
         # tcn_layers=[],
-        tcn_layers=[(first_layer_sz * 8, 2),
-                    (first_layer_sz * 8, 2),
-                    (first_layer_sz * 8, 2),
-                    (first_layer_sz * 16, 2)],
-        tcn_dilation=3,
+        tcn_layers=[
+            (64 + xtr, 4),
+            (64 + xtr, 4),
+            (64 + xtr, 4),
+            (64 + xtr, 4),
+        ],
+        tcn_dilation=2,
         spatial_drop_rate=0.05,
         dense_drop_rate=0.2,
-        dense_layers=[128]
+        dense_layers=[],
+        output_activation='relu',
+        num_of_classes=1,
     )
     return model

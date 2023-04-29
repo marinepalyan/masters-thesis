@@ -13,8 +13,6 @@ from models import get_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-SAMPLE_SIZE = 1500
-input_shape = (SAMPLE_SIZE, 4)
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 
@@ -59,7 +57,7 @@ def fill_zeros(features, label, training: bool = True):
 
     # Assign the first n values to zeros
     def slice_zeros_wrapper(column):
-        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [SAMPLE_SIZE - n])], axis=0)
+        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [CONFIG['sample_size'] - n])], axis=0)
 
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
                              func=slice_zeros_wrapper)(features, training)
@@ -92,7 +90,7 @@ def dist_label(features, label, training: bool):
 
 def join_features(features, label, training: bool):
     features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
-    features = tf.reshape(features, input_shape)
+    features = tf.reshape(features, (CONFIG['sample_size'], 4))
     # label = tf.reshape(label, (1,))
     return features, label
 
@@ -112,12 +110,11 @@ def parse_example(example_proto, training: bool):
 
 
 def sample_dataset(example, training: bool):
-    # TODO fix maxval
-    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - SAMPLE_SIZE - 1, dtype=tf.int32)
+    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - CONFIG['sample_size'] - 1, dtype=tf.int32)
 
     # tf.print(f"n: {n}")
     def slice_column(column):
-        return column[start_idx:start_idx + SAMPLE_SIZE]
+        return column[start_idx:start_idx + CONFIG['sample_size']]
 
     keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
     example = (apply_to_keys(keys=keys, func=slice_column))(example, training)
@@ -142,12 +139,14 @@ def build_dataset(ds, transforms, training=False):
     for features, label in ds.take(5):
         print(features)
         print(features.shape)
+        assert features.shape == (CONFIG['sample_size'], 4)
         print(label)
     return ds
 
 
 # Define the main function
 def main(input_files: List, test_size: float):
+    input_shape = (CONFIG['sample_size'], 4)
     tensorboard_callback = keras.callbacks.TensorBoard(
         log_dir=LOGDIR.format(CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S")))
     test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
@@ -189,6 +188,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
-    for model in ['tcn']:
-        CONFIG['model_name'] = model
-        main(input_files, args.test_size)
+    main(input_files, args.test_size)

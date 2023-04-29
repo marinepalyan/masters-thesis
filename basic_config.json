@@ -1,9 +1,11 @@
 {
   "scale": 5,
-  "epochs": 10,
-  "model_name": "dense",
+  "epochs": 100,
+  "model_name": "tcn",
   "model_type": "regression",
   "batch_size": 32,
   "steps_per_epoch": 1000,
-  "validation_steps": 100
+  "validation_steps": 100,
+  "distribution": "cauchy",
+  "sample_size": 1565
 }
