@@ -159,11 +159,7 @@ def build_dataset(ds, transforms, training=False):
     return ds
 
 
-# Define the main function
-def main(input_files: List, test_size: float):
-    input_shape = (CONFIG['sample_size'], 4)
-    tensorboard_callback = keras.callbacks.TensorBoard(
-        log_dir=LOGDIR.format(CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S")))
+def prepare_data(input_files: List, test_size: float):
     test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
     train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
     test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
@@ -191,14 +187,21 @@ def main(input_files: List, test_size: float):
 
     train_ds = train_ds.shuffle(100).batch(32)
     test_ds = test_ds.batch(CONFIG['batch_size'])
+    return train_ds, test_ds
 
+
+# Define the main function
+def main(input_files: List, test_size: float):
+    train_ds, test_ds = prepare_data(input_files, test_size)
+    tensorboard_callback = keras.callbacks.TensorBoard(
+        log_dir=LOGDIR.format(CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S")))
+    input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
     model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
               callbacks=[tensorboard_callback])
-
     save_path = f"{CONFIG['model_name']}_{CONFIG['model_type']}.ckpt"
     model.save_weights(save_path)
 
