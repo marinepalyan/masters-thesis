@@ -18,6 +18,11 @@ input_shape = (SAMPLE_SIZE, 4)
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 
+LABEL_DISTRIBUTIONS = {
+    'gaussian': tfp.distributions.Normal,
+    'cauchy': tfp.distributions.Cauchy,
+}
+
 CONFIG = {}
 
 LOGDIR = '../logs/{}_{}.txt'
@@ -74,16 +79,15 @@ def one_hot_label(features, label, training: bool):
     return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
 
 
-def normal_dist_label(features, label, training: bool):
+def dist_label(features, label, training: bool):
     label = tf.cast(label, tf.int32)
-    normal_distribution = tfp.distributions.Normal(loc=label, scale=CONFIG['scale'])
-    return features, normal_distribution.prob(HR_GRID)
-
-
-def cauchy_dist_label(features, label, training: bool):
-    label = tf.cast(label, tf.int32)
-    cauchy_distribution = tfp.distributions.Cauchy(loc=label, scale=CONFIG['scale'])
-    return features, cauchy_distribution.prob(HR_GRID)
+    try:
+        dist_function = LABEL_DISTRIBUTIONS[CONFIG['distribution']]
+    except KeyError:
+        raise ValueError(f"Invalid distribution {CONFIG['distribution']}. "
+                         f"Must be one of {list(LABEL_DISTRIBUTIONS.keys())}")
+    distribution = dist_function(loc=label, scale=CONFIG['scale'])
+    return features, distribution.prob(HR_GRID)
 
 
 def join_features(features, label, training: bool):
