@@ -164,6 +164,13 @@ def main(input_files: List, test_size: float):
             join_features
         ]
     ]
+    if CONFIG['model_type'] == 'classification':
+        if CONFIG['distribution'] is None:
+            raise ValueError("Must specify a distribution for classification")
+        if CONFIG['distribution'] == 'one_hot':
+            transforms[1].append(one_hot_label)
+        else:
+            transforms[1].append(dist_label)
     train_ds = build_dataset(train_dataset, transforms, training=True)
     test_ds = build_dataset(test_dataset, transforms, training=False)
 
