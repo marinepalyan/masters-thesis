@@ -12,18 +12,15 @@ import tensorflow_probability as tfp
 from models import get_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
+CONFIG = {}
+LOGDIR = '../logs/{}_{}.txt'
 
 LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
     'cauchy': tfp.distributions.Cauchy,
 }
-
-CONFIG = {}
-
-LOGDIR = '../logs/{}_{}.txt'
 
 
 def set_config(config_file):
@@ -37,7 +34,6 @@ def apply_to_keys(keys: List[str], func: Callable):
         for key in keys:
             example[key] = func(example[key])
         return example
-
     return apply_to_keys_fn
 
 
@@ -65,7 +61,11 @@ def fill_zeros(features, label, training: bool = True):
 
 
 def choose_label(features, label, training: bool):
-    return features, label['heart_rate'][-1]
+    if CONFIG['label'] == 'last':
+        idx = -1
+    elif CONFIG['label'] == 'middle':
+        idx = CONFIG['sample_size'] // 2
+    return features, label['heart_rate'][idx]
 
 
 def int_label(features, label, training: bool):
