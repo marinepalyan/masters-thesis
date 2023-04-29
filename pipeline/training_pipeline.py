@@ -15,7 +15,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 CONFIG = {}
-LOGDIR = '../logs/{}_{}.txt'
 
 LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
@@ -51,10 +50,6 @@ def apply_to_keys(keys: List[str], func: Callable):
     return apply_to_keys_fn
 
 
-# specify to do this only when training
-# how much future is useful? e.g. 1-minute data into the future
-# after a while start losing past data and results get worse
-# use not the last label, but in the middle, or 75th percentile
 def fill_zeros(features, label, training: bool = True):
     if not training:
         return features, label
@@ -79,6 +74,9 @@ def choose_label(features, label, training: bool):
         idx = -1
     elif CONFIG['label'] == 'middle':
         idx = CONFIG['sample_size'] // 2
+    elif isinstance(CONFIG['label'], int):
+        # If the label is a percentage, then choose the label at that percentile
+        idx = int(CONFIG['sample_size'] * int(CONFIG['label']) / 100)
     return features, label['heart_rate'][idx]
 
 
@@ -192,9 +190,10 @@ def prepare_data(input_files: List, test_size: float):
 
 # Define the main function
 def main(input_files: List, test_size: float):
+    main_work_dir = os.path.join("../logs", CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S"))
+    os.makedirs(main_work_dir, exist_ok=True)
     train_ds, test_ds = prepare_data(input_files, test_size)
-    tensorboard_callback = keras.callbacks.TensorBoard(
-        log_dir=LOGDIR.format(CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S")))
+    tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
     model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
@@ -202,7 +201,7 @@ def main(input_files: List, test_size: float):
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
               callbacks=[tensorboard_callback])
-    save_path = f"{CONFIG['model_name']}_{CONFIG['model_type']}.ckpt"
+    save_path = os.path.join(main_work_dir, f"{CONFIG['model_name']}_{CONFIG['model_type']}.ckpt")
     model.save_weights(save_path)
 
 
