@@ -21,12 +21,26 @@ LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
     'cauchy': tfp.distributions.Cauchy,
 }
+INPUT_SIZE_CONFIG = {
+    'tcn': 1565
+}
+MODEL_CONFIG = {
+    'regression': {
+        'num_of_classes': 1,
+        'output_activation': 'relu',
+    },
+    'classification': {
+        'num_of_classes': len(HR_GRID),
+        'output_activation': 'softmax',
+    }
+}
 
 
 def set_config(config_file):
     global CONFIG
     with open(config_file) as f:
         CONFIG = json.load(f)
+    CONFIG['sample_size'] = INPUT_SIZE_CONFIG.get(CONFIG['model_name'], 1500)
 
 
 def apply_to_keys(keys: List[str], func: Callable):
@@ -179,7 +193,7 @@ def main(input_files: List, test_size: float):
     test_ds = test_ds.batch(CONFIG['batch_size'])
 
     # Create the TensorFlow model and compile it
-    model = get_model(CONFIG['model_name'], CONFIG["model_type"], input_shape)
+    model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
