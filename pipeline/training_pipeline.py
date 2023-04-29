@@ -179,7 +179,7 @@ def main(input_files: List, test_size: float):
     test_ds = test_ds.batch(CONFIG['batch_size'])
 
     # Create the TensorFlow model and compile it
-    model = get_model(CONFIG['model_name'], input_shape)
+    model = get_model(CONFIG['model_name'], CONFIG["model_type"], input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],

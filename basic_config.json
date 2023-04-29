@@ -1,8 +1,8 @@
 {
   "scale": 5,
   "epochs": 100,
-  "model_name": "tcn",
-  "model_type": "regression",
+  "model_name": "wavenet",
+  "model_type": "classification",
   "batch_size": 32,
   "steps_per_epoch": 1000,
   "validation_steps": 100,

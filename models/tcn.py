@@ -66,7 +66,10 @@ def cnn_tcn(nr_features: int,
     return tf.keras.Model(input_l, output_l)
 
 
-def get_tcn_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
+def get_tcn_model(input_shape: Tuple[int, int],
+                  output_activation: str,
+                  num_of_classes: int
+                  ) -> tf.keras.Model:
     xtr = 6
     model = cnn_tcn(
         nr_features=input_shape[1],
@@ -93,7 +96,7 @@ def get_tcn_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
         spatial_drop_rate=0.05,
         dense_drop_rate=0.2,
         dense_layers=[],
-        output_activation='relu',
-        num_of_classes=1,
+        output_activation=output_activation,
+        num_of_classes=num_of_classes,
     )
     return model
