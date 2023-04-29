@@ -69,16 +69,16 @@ def choose_label(features, label, training: bool):
 
 
 def int_label(features, label, training: bool):
-    return features, tf.cast(label, tf.int32)
+    return features, tf.math.round(label)
 
 
 def one_hot_label(features, label, training: bool):
-    label = tf.cast(label, tf.int32)
+    label = tf.math.round(label)
     return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
 
 
 def dist_label(features, label, training: bool):
-    label = tf.cast(label, tf.int32)
+    label = tf.math.round(label)
     try:
         dist_function = LABEL_DISTRIBUTIONS[CONFIG['distribution']]
     except KeyError:
@@ -141,6 +141,7 @@ def build_dataset(ds, transforms, training=False):
         print(features.shape)
         assert features.shape == (CONFIG['sample_size'], 4)
         print(label)
+        print(label.shape)
     return ds
 
 
