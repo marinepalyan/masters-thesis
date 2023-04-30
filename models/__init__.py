@@ -1,6 +1,7 @@
 from typing import Tuple, Dict
 
 import tensorflow as tf
+from metrics.weighted_mae import WeightedMAE
 
 from .dense import get_dense_model
 from .tcn import get_tcn_model
@@ -27,6 +28,6 @@ def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
         'output_activation': model_config['output_activation'],
     }
     model = MODELS[model_name](**kwargs)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['mae', 'mse'])
+    model.compile(optimizer=optimizer, loss=loss, metrics=['mae', 'mse', WeightedMAE()])
     print(model.summary())
     return model
