@@ -11,6 +11,7 @@ import tensorflow_probability as tfp
 
 import itertools
 
+from metrics.weighted_mae import WeightedMAE
 from models import get_model, MODELS
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -27,11 +28,13 @@ MODEL_CONFIG = {
         'num_of_classes': 1,
         'output_activation': 'relu',
         'loss': 'mse',
+        'metrics': ['mae', 'mse']
     },
     'classification': {
         'num_of_classes': len(HR_GRID),
         'output_activation': 'softmax',
         'loss': 'categorical_crossentropy',
+        'metrics': [WeightedMAE()]
     }
 }
 
