@@ -9,7 +9,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from models import get_model
+import itertools
+
+from models import get_model, MODELS
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 TOTAL_NUM_OF_USERS = 15
@@ -20,17 +22,16 @@ LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
     'cauchy': tfp.distributions.Cauchy,
 }
-INPUT_SIZE_CONFIG = {
-    'tcn': 1565
-}
 MODEL_CONFIG = {
     'regression': {
         'num_of_classes': 1,
         'output_activation': 'relu',
+        'loss': 'mse',
     },
     'classification': {
         'num_of_classes': len(HR_GRID),
         'output_activation': 'softmax',
+        'loss': 'categorical_crossentropy',
     }
 }
 
@@ -39,7 +40,6 @@ def set_config(config_file):
     global CONFIG
     with open(config_file) as f:
         CONFIG = json.load(f)
-    CONFIG['sample_size'] = INPUT_SIZE_CONFIG.get(CONFIG['model_name'], 1500)
 
 
 def apply_to_keys(keys: List[str], func: Callable):
@@ -86,6 +86,7 @@ def int_label(features, label, training: bool):
 
 def one_hot_label(features, label, training: bool):
     label = tf.math.round(label)
+    label = tf.cast(label, tf.int32)
     return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
 
 
@@ -190,9 +191,11 @@ def prepare_data(input_files: List, test_size: float):
 
 # Define the main function
 def main(input_files: List, test_size: float):
-    main_work_dir = os.path.join("../logs", CONFIG['model_name'], datetime.now().strftime("%Y%m%d-%H%M%S"))
-    os.makedirs(main_work_dir, exist_ok=True)
     train_ds, test_ds = prepare_data(input_files, test_size)
+    main_work_dir = os.path.join("../logs", CONFIG['model_name'], CONFIG['model_type'])
+    if CONFIG['distribution'] is not None:
+        main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
+    os.makedirs(main_work_dir, exist_ok=True)
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
@@ -201,8 +204,12 @@ def main(input_files: List, test_size: float):
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
               callbacks=[tensorboard_callback])
-    save_path = os.path.join(main_work_dir, f"{CONFIG['model_name']}_{CONFIG['model_type']}.ckpt")
-    model.save_weights(save_path)
+    save_path = os.path.join(main_work_dir,
+                             f"{CONFIG['model_name']}_{CONFIG['model_type']}_{CONFIG['distribution']}.ckpt")
+    # model.save_weights(save_path)
+    # save training config in the same folder
+    with open(os.path.join(main_work_dir, 'config.json'), 'w') as f:
+        json.dump(CONFIG, f)
 
 
 if __name__ == '__main__':
@@ -212,4 +219,21 @@ if __name__ == '__main__':
     args = parser.parse_args()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
-    main(input_files, args.test_size)
+    models_config = {
+        'model_type': ['regression', 'classification'],
+        'model_name': MODELS.keys(),
+        'distribution': [None, 'one_hot', 'gaussian', 'cauchy'],
+        'label': ['last', 'middle']
+    }
+    keys, values = zip(*models_config.items())
+    permutations_dicts = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    permutations_dicts = [d for d in permutations_dicts if not (d['model_type'] == 'regression'
+                                                                and d['distribution'] is not None)]
+    permutations_dicts = [d for d in permutations_dicts if not (d['model_type'] == 'classification'
+                                                                and d['distribution'] is None)]
+
+    for permutation in permutations_dicts:
+        CONFIG.update(permutation)
+        CONFIG["sample_size"] = 1565 if CONFIG['model_name'] == 'tcn' else 1500
+        print(CONFIG)
+        main(input_files, args.test_size)

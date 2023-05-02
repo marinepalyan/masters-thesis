@@ -19,7 +19,7 @@ MODELS = {
 
 
 def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
-              optimizer: str = 'adam', loss: str = 'mse') -> tf.keras.Model:
+              optimizer: str = 'adam') -> tf.keras.Model:
     if model_name not in MODELS:
         raise ValueError(f"Model {model_name} not found. Must be one of {list(MODELS.keys())}")
     kwargs = {
@@ -28,6 +28,6 @@ def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
         'output_activation': model_config['output_activation'],
     }
     model = MODELS[model_name](**kwargs)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['mae', 'mse', WeightedMAE()])
+    model.compile(optimizer=optimizer, loss=model_config['loss'], metrics=['mae', 'mse'])
     print(model.summary())
     return model

@@ -67,6 +67,7 @@ def get_wavenet_model(input_shape: Tuple[int, int],
 
 
     pred_seq_train = Lambda(slice, arguments={'seq_length': 1})(out)
+    pred_seq_train = Flatten()(pred_seq_train)
 
     model = Model(history_seq, pred_seq_train)
     return model

@@ -4,8 +4,8 @@
   "model_name": "wavenet",
   "model_type": "classification",
   "batch_size": 32,
-  "steps_per_epoch": 1000,
-  "validation_steps": 100,
+  "steps_per_epoch": 10000,
+  "validation_steps": 1000,
   "distribution": "cauchy",
   "sample_size": 1500,
   "label": "last"
