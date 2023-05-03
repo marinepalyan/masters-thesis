@@ -3,6 +3,7 @@ import json
 import os
 from typing import List, Callable
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import keras
 import numpy as np
 import tensorflow as tf
@@ -14,7 +15,7 @@ from metrics.weighted_mae import WeightedMAE
 from metrics.weighted_mse import WeightedMSE
 from models import get_model, MODELS
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 CONFIG = {}
@@ -203,11 +204,12 @@ def main(input_files: List, test_size: float):
     early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=2)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
-    mirrored_strategy = tf.distribute.MirroredStrategy()
-    with mirrored_strategy.scope():
+    one_device_strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+    print(tf.config.list_physical_devices())
+    with one_device_strategy.scope():
         model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
-        # Train the model on the transformed dataset
-        model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
+    # Train the model on the transformed dataset
+    model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
                   validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
                   callbacks=[tensorboard_callback, early_stop_callback])
     save_path = os.path.join(main_work_dir,
