@@ -200,13 +200,14 @@ def main(input_files: List, test_size: float):
         main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
     os.makedirs(main_work_dir, exist_ok=True)
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
+    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=2)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
     model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
               validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
-              callbacks=[tensorboard_callback])
+              callbacks=[tensorboard_callback, early_stop_callback])
     save_path = os.path.join(main_work_dir,
                              f"{CONFIG['model_name']}_{CONFIG['model_type']}_{CONFIG['distribution']}.ckpt")
     # model.save_weights(save_path)
