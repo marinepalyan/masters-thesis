@@ -1,12 +1,12 @@
 import tensorflow as tf
-from keras.losses import mean_absolute_error
+from keras.losses import mean_squared_error
 
 HR_GRID = list(range(30, 230, 1))
 
 
-class WeightedMAE(tf.keras.metrics.MeanMetricWrapper):
-    def __init__(self, name='weighted_mae', **kwargs):
-        super(WeightedMAE, self).__init__(mean_absolute_error, name=name, **kwargs)
+class WeightedMSE(tf.keras.metrics.MeanMetricWrapper):
+    def __init__(self, name='weighted_mse', **kwargs):
+        super(WeightedMSE, self).__init__(mean_squared_error, name=name, **kwargs)
         self.averaging_weights = tf.constant(HR_GRID, dtype=tf.float32)
 
     def update_state(self, y_true, y_pred, sample_weight=None):

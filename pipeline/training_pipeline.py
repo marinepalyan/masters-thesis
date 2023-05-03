@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-from datetime import datetime
 from typing import List, Callable
 
 import keras
@@ -12,6 +11,7 @@ import tensorflow_probability as tfp
 import itertools
 
 from metrics.weighted_mae import WeightedMAE
+from metrics.weighted_mse import WeightedMSE
 from models import get_model, MODELS
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -34,7 +34,7 @@ MODEL_CONFIG = {
         'num_of_classes': len(HR_GRID),
         'output_activation': 'softmax',
         'loss': 'categorical_crossentropy',
-        'metrics': [WeightedMAE()]
+        'metrics': [WeightedMAE(), WeightedMSE()]
     }
 }
 
@@ -195,7 +195,7 @@ def prepare_data(input_files: List, test_size: float):
 # Define the main function
 def main(input_files: List, test_size: float):
     train_ds, test_ds = prepare_data(input_files, test_size)
-    main_work_dir = os.path.join("../logs", CONFIG['model_name'], CONFIG['model_type'])
+    main_work_dir = os.path.join("../logs", CONFIG['model_name'], CONFIG['model_type'], CONFIG['label'])
     if CONFIG['distribution'] is not None:
         main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
     os.makedirs(main_work_dir, exist_ok=True)
