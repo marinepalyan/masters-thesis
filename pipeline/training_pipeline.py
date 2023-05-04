@@ -12,6 +12,7 @@ import tensorflow_probability as tfp
 import itertools
 from datetime import datetime
 from models import get_model, MODELS
+from scipy.signal import butter, filtfilt
 
 
 TOTAL_NUM_OF_USERS = 15
@@ -22,7 +23,6 @@ LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
     'cauchy': tfp.distributions.Cauchy,
 }
-
 
 
 def set_config(config_file):
@@ -129,15 +129,27 @@ def separate_features_label(dataset, training: bool):
     return features, label
 
 
+# noinspection PyTupleAssignmentBalance
+def apply_ppg_filter(features, label, training: bool):
+    if CONFIG['use_ppg_filter']:
+        b, a = butter(4, 0.5, 'highpass', fs=25, output='ba')
+        features['ppg'] = tf.py_function(filtfilt, [b, a, features['ppg']], tf.float32)
+    return features, label
+
+
+def standardize_ppg(features, label, training: bool):
+    mean, variance = tf.nn.moments(features['ppg'], axes=[0])
+    std = tf.sqrt(variance)
+    features['ppg'] = (features['ppg'] - mean) / std
+    return features, label
+
+
 def build_dataset(ds, transforms, training=False):
     ds = ds.cache().repeat()
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
     for transform in transforms[1]:
         ds = ds.map(lambda x, y: transform(x, y, training=training))
-    # FIXME this is not working
-    # getting an error that the dataset is not iterable
-    # slice index -1 of dimension 0 out of bounds.
     for features, label in ds.take(5):
         print(features)
         print(features.shape)
@@ -158,6 +170,8 @@ def prepare_data(input_files: List, test_size: float):
             sample_dataset,
             separate_features_label],
         [
+            apply_ppg_filter,
+            standardize_ppg,
             fill_zeros,
             choose_label,
             join_features

@@ -9,5 +9,6 @@
   "distribution": "cauchy",
   "sample_size": 1500,
   "label": "last",
-  "patience": 5
+  "patience": 5,
+  "use_ppg_filter": true
 }
