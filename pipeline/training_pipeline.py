@@ -10,9 +10,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 import itertools
-
-from metrics.weighted_mae import WeightedMAE
-from metrics.weighted_mse import WeightedMSE
+from datetime import datetime
 from models import get_model, MODELS
 
 
@@ -183,12 +181,13 @@ def prepare_data(input_files: List, test_size: float):
 # Define the main function
 def main(input_files: List, test_size: float):
     train_ds, test_ds = prepare_data(input_files, test_size)
-    main_work_dir = os.path.join("../logs", CONFIG['model_name'], CONFIG['model_type'], CONFIG['label'])
+    main_work_dir = os.path.join("../logs", datetime.now().strftime("%Y%m%d"),
+                                 CONFIG['model_name'], CONFIG['model_type'], CONFIG['label'])
     if CONFIG['distribution'] is not None:
         main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
     os.makedirs(main_work_dir, exist_ok=True)
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
-    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=2)
+    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'])
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
     one_device_strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")

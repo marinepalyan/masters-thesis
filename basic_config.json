@@ -1,12 +1,13 @@
 {
   "scale": 5,
-  "epochs": 100,
+  "epochs": 150,
   "model_name": "wavenet",
   "model_type": "classification",
   "batch_size": 32,
-  "steps_per_epoch": 1000,
+  "steps_per_epoch": 200,
   "validation_steps": 1000,
   "distribution": "cauchy",
   "sample_size": 1500,
-  "label": "last"
+  "label": "last",
+  "patience": 5
 }
