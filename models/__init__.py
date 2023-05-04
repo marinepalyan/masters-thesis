@@ -2,6 +2,8 @@ from typing import Tuple, Dict
 
 import tensorflow as tf
 
+from metrics.weighted_mae import WeightedMAE
+from metrics.weighted_mse import WeightedMSE
 from .dense import get_dense_model
 from .tcn import get_tcn_model
 from .chatgpt import get_chatgpt_model
@@ -17,8 +19,23 @@ MODELS = {
 }
 
 
-def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
+def get_model(model_name: str, model_type: str, input_shape: Tuple[int, int],
               optimizer: str = 'adam') -> tf.keras.Model:
+    MODEL_CONFIG = {
+        'regression': {
+            'num_of_classes': 1,
+            'output_activation': 'relu',
+            'loss': 'mse',
+            'metrics': ['mae', 'mse']
+        },
+        'classification': {
+            'num_of_classes': 200,
+            'output_activation': 'softmax',
+            'loss': 'categorical_crossentropy',
+            'metrics': [WeightedMAE(), WeightedMSE()]
+        }
+    }
+    model_config: Dict = MODEL_CONFIG[model_type]
     if model_name not in MODELS:
         raise ValueError(f"Model {model_name} not found. Must be one of {list(MODELS.keys())}")
     kwargs = {
@@ -27,6 +44,7 @@ def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
         'output_activation': model_config['output_activation'],
     }
     model = MODELS[model_name](**kwargs)
-    model.compile(optimizer=optimizer, loss=model_config['loss'], metrics=model_config['metrics'])
+    optimizer_f = tf.optimizers.Adam(learning_rate=0.0001)
+    model.compile(optimizer=optimizer_f, loss=model_config['loss'], metrics=model_config['metrics'])
     print(model.summary())
     return model
