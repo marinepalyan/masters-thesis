@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict
 
 import tensorflow as tf
 
@@ -17,11 +17,16 @@ MODELS = {
 }
 
 
-def get_model(model_name: str, input_shape: Tuple[int, int],
-              optimizer: str = 'adam', loss: str = 'mse') -> tf.keras.Model:
+def get_model(model_name: str, model_config: Dict, input_shape: Tuple[int, int],
+              optimizer: str = 'adam') -> tf.keras.Model:
     if model_name not in MODELS:
         raise ValueError(f"Model {model_name} not found. Must be one of {list(MODELS.keys())}")
-    model = MODELS[model_name](input_shape)
-    model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+    kwargs = {
+        'input_shape': input_shape,
+        'num_of_classes': model_config['num_of_classes'],
+        'output_activation': model_config['output_activation'],
+    }
+    model = MODELS[model_name](**kwargs)
+    model.compile(optimizer=optimizer, loss=model_config['loss'], metrics=model_config['metrics'])
     print(model.summary())
     return model

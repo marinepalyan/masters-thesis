@@ -4,3 +4,5 @@ seaborn
 matplotlib
 pandas-tfrecords==0.1.6
 scipy~=1.10.1
+tensorflow-probability~=0.19.0
+pytest
