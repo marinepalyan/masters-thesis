@@ -35,7 +35,7 @@ MODEL_CONFIG = {
         'num_of_classes': len(HR_GRID),
         'output_activation': 'softmax',
         'loss': 'categorical_crossentropy',
-        'metrics': [WeightedMAE(), WeightedMSE()]
+        'metrics': [WeightedMAE, WeightedMSE]
     }
 }
 
@@ -207,7 +207,10 @@ def main(input_files: List, test_size: float):
     one_device_strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
     print(tf.config.list_physical_devices())
     with one_device_strategy.scope():
-        model = get_model(CONFIG['model_name'], MODEL_CONFIG[CONFIG["model_type"]], input_shape)
+        conf = MODEL_CONFIG[CONFIG["model_type"]]
+        if CONFIG["model_type"] == "classification":
+            conf['metrics'] = [metric() for metric in conf['metrics']]
+        model = get_model(CONFIG['model_name'], conf, input_shape)
     # Train the model on the transformed dataset
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
                   validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
