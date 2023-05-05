@@ -4,12 +4,12 @@
   "model_name": "wavenet",
   "model_type": "classification",
   "batch_size": 32,
-  "steps_per_epoch": 200,
-  "validation_steps": 50,
+  "steps_per_epoch": 500,
+  "validation_steps": 100,
   "distribution": "cauchy",
   "sample_size": 1500,
   "label": "last",
-  "patience": 5,
+  "patience": 10,
   "use_ppg_filter": true,
   "device": "/gpu:1"
 }

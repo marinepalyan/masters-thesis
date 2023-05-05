@@ -195,13 +195,17 @@ def prepare_data(input_files: List, test_size: float):
 # Define the main function
 def main(input_files: List, test_size: float):
     train_ds, test_ds = prepare_data(input_files, test_size)
-    main_work_dir = os.path.join("../logs", datetime.now().strftime("%Y%m%d"),
-                                 CONFIG['model_name'], CONFIG['model_type'], CONFIG['label'])
+    main_features = [CONFIG['model_name'], CONFIG['model_type'], CONFIG['label']]
     if CONFIG['distribution'] is not None:
-        main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
+        main_features.append(CONFIG['distribution'])
+    if CONFIG['use_ppg_filter']:
+        main_features.append('ppg_filter')
+    main_work_dir = os.path.join("../logs", datetime.now().strftime("%Y%m%d"), *main_features)
+    
     os.makedirs(main_work_dir, exist_ok=True)
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
-    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'])
+    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'],
+                                                        start_from_epoch=50)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
     one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
@@ -212,8 +216,8 @@ def main(input_files: List, test_size: float):
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
                   validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
                   callbacks=[tensorboard_callback, early_stop_callback])
-    save_path = os.path.join(main_work_dir,
-                             f"{CONFIG['model_name']}_{CONFIG['model_type']}_{CONFIG['distribution']}.ckpt")
+    model_name = '_'.join(main_features)
+    save_path = os.path.join(main_work_dir, f"{model_name}.ckpt")
     model.save_weights(save_path)
     # save training config in the same folder
     with open(os.path.join(main_work_dir, 'config.json'), 'w') as f:
