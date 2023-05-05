@@ -204,7 +204,7 @@ def main(input_files: List, test_size: float):
     early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'])
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
-    one_device_strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+    one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
     print(tf.config.list_physical_devices())
     with one_device_strategy.scope():
         model = get_model(CONFIG['model_name'], CONFIG['model_type'], input_shape)

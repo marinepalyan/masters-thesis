@@ -10,6 +10,6 @@
   "sample_size": 1500,
   "label": "last",
   "patience": 5,
-  "use_ppg_filter": false,
-  "device": "/gpu:0",
+  "use_ppg_filter": true,
+  "device": "/gpu:1"
 }
