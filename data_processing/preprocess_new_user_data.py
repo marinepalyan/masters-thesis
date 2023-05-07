@@ -3,7 +3,6 @@ import os
 import tensorflow as tf
 
 from pipeline.training_pipeline import apply_to_keys
-from pprint import pprint
 
 FEATURE_TYPE_MAP = {
     'sensor_readings.105.timestamp (ms)': tf.float32,
@@ -17,11 +16,6 @@ FEATURE_TYPE_MAP = {
     'sensor_readings.200.value': tf.float32,
 }
 feature_description = {k: tf.io.VarLenFeature(FEATURE_TYPE_MAP[k]) for k in FEATURE_TYPE_MAP.keys()}
-
-data_dir = '../data/new_user'
-# Open all tfrecord files in data_dir
-tfrecord_paths = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.tfrecords')]
-raw_dataset = tf.data.TFRecordDataset(tfrecord_paths)
 
 
 def format_input(example):
@@ -47,12 +41,17 @@ def format_input(example):
     }
 
 
-parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
-parsed_dataset = parsed_dataset.map(
-    lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
-parsed_dataset = parsed_dataset.map(format_input)
+def load_new_user_data(data_dir: str = '../data/new_user'):
+    tfrecord_paths = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.tfrecords')]
+    raw_dataset = tf.data.TFRecordDataset(tfrecord_paths)
 
+    parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
+    parsed_dataset = parsed_dataset.map(
+        lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
+    parsed_dataset = parsed_dataset.map(format_input)
 
-# for elem in parsed_dataset.as_numpy_iterator():
-#     pprint(elem)
-#     print(tf.math.reduce_min(elem['ppg']).numpy(), tf.math.reduce_max(elem['ppg']).numpy())
+    # for elem in parsed_dataset.as_numpy_iterator():
+    #     pprint(elem)
+    #     print(tf.math.reduce_min(elem['ppg']).numpy(), tf.math.reduce_max(elem['ppg']).numpy())
+    #     break
+    return parsed_dataset
