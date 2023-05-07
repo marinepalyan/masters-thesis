@@ -1,5 +1,5 @@
 {
-  "scale": 5,
+  "scale": 2,
   "epochs": 150,
   "model_name": "wavenet",
   "model_type": "classification",

@@ -8,6 +8,7 @@ import keras
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from matplotlib import pyplot as plt
 
 import itertools
 from datetime import datetime
@@ -104,7 +105,7 @@ def parse_example(example_proto, training: bool):
         "acc_y": tf.io.VarLenFeature(tf.float32),
         "acc_z": tf.io.VarLenFeature(tf.float32),
         "ppg": tf.io.VarLenFeature(tf.float32),
-        "activity": tf.io.VarLenFeature(tf.int64),
+        # "activity": tf.io.VarLenFeature(tf.int64),
         "heart_rate": tf.io.VarLenFeature(tf.float32)
     }
     example = tf.io.parse_single_example(example_proto, feature_description)
@@ -131,9 +132,13 @@ def separate_features_label(dataset, training: bool):
 
 # noinspection PyTupleAssignmentBalance
 def apply_ppg_filter(features, label, training: bool):
+    # plt.plot(features['ppg'].as_numpy_iterator(), label='before')
     if CONFIG['use_ppg_filter']:
         b, a = butter(4, 0.5, 'highpass', fs=25, output='ba')
         features['ppg'] = tf.py_function(filtfilt, [b, a, features['ppg']], tf.float32)
+    # plt.plot(features['ppg'].as_numpy_iterator())
+    # plt.legend()
+    # plt.show()
     return features, label
 
 
@@ -148,8 +153,26 @@ def build_dataset(ds, transforms, training=False):
     ds = ds.cache().repeat()
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
+
+    # for features, label in ds.take(10):
+    #     print(features)
+    #     print(features['ppg'].numpy().shape)
+    #     plt.plot(features['ppg'].numpy(), label='before')
+    #     features, label = apply_ppg_filter(features, label, training)
+    #     plt.plot(features['ppg'].numpy(), label='after')
+    #     plt.legend()
+    #     plt.show()
+
     for transform in transforms[1]:
         ds = ds.map(lambda x, y: transform(x, y, training=training))
+
+        for features, label in ds.take(5):
+            print(features)
+            print(label)
+            # plt.plot(features['ppg'].numpy(), label='after')
+            # plt.legend()
+            # plt.show()
+
     for features, label in ds.take(5):
         print(features)
         print(features.shape)
@@ -166,7 +189,7 @@ def prepare_data(input_files: List, test_size: float):
     transforms = [
         [
             parse_example,
-            apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'activity', 'heart_rate'], func=tf.sparse.to_dense),
+            apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate'], func=tf.sparse.to_dense),
             sample_dataset,
             separate_features_label],
         [
@@ -208,6 +231,7 @@ def main(input_files: List, test_size: float):
                                                         start_from_epoch=50)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
+    print(CONFIG['device'])
     one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
     print(tf.config.list_physical_devices())
     with one_device_strategy.scope():
@@ -232,7 +256,7 @@ if __name__ == '__main__':
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
     models_config = {
-        'model_type': ['regression', 'classification'],
+        'model_type': ['regression',],
         'model_name': MODELS.keys(),
         'distribution': [None, 'one_hot', 'gaussian', 'cauchy'],
         'label': ['last', 'middle']
