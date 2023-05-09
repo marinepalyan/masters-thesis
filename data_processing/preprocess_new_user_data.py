@@ -1,8 +1,10 @@
 import os
+from pprint import pprint
 
 import tensorflow as tf
+from matplotlib import pyplot as plt
 
-from pipeline.training_pipeline import apply_to_keys
+from pipeline.training_pipeline import apply_to_keys, separate_features_label, apply_ppg_filter, standardize_ppg
 
 FEATURE_TYPE_MAP = {
     'sensor_readings.105.timestamp (ms)': tf.float32,
@@ -26,18 +28,12 @@ def format_input(example):
     ppg = (example['sensor_readings.105.slot1.pd1'] +
            example['sensor_readings.105.slot1.pd2'] +
            example['sensor_readings.105.slot1.pd3']) / 3
-    # mock activity feature with all zeros
-    activity = tf.zeros_like(heart_rate)
     return {
         'heart_rate': heart_rate,
         'acc_x': acc_x,
         'acc_y': acc_y,
         'acc_z': acc_z,
-        'activity': activity,
         'ppg': ppg,
-        'ppg1': example['sensor_readings.105.slot1.pd1'],
-        'ppg2': example['sensor_readings.105.slot1.pd2'],
-        'ppg3': example['sensor_readings.105.slot1.pd3'],
     }
 
 
@@ -49,9 +45,23 @@ def load_new_user_data(data_dir: str = '../data/new_user'):
     parsed_dataset = parsed_dataset.map(
         lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
     parsed_dataset = parsed_dataset.map(format_input)
+    for elem in parsed_dataset.take(5):
+        pprint(elem)
+        plt.plot(elem['ppg'], color='blue')
+        plt.show()
 
-    # for elem in parsed_dataset.as_numpy_iterator():
-    #     pprint(elem)
-    #     print(tf.math.reduce_min(elem['ppg']).numpy(), tf.math.reduce_max(elem['ppg']).numpy())
-    #     break
+    parsed_dataset = parsed_dataset.map(lambda x: separate_features_label(x, True))
+    parsed_dataset = parsed_dataset.map(lambda x, y: apply_ppg_filter(x, y, True))
+    for features, elem in parsed_dataset.take(5):
+        pprint(features)
+        plt.plot(features['ppg'], color='red')
+        plt.show()
+
+    parsed_dataset = parsed_dataset.map(lambda x, y: standardize_ppg(x, y, True))
+
+    for features, elem in parsed_dataset.take(5):
+        pprint(features)
+        plt.plot(features['ppg'], color='green')
+        plt.show()
+
     return parsed_dataset
