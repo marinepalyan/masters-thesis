@@ -5,7 +5,32 @@ from typing import List
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
-from pipeline.training_pipeline import apply_to_keys, separate_features_label, apply_ppg_filter, standardize_ppg
+from models import get_model
+from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
+                                        standardize_ppg, join_features)
+
+
+CONFIG = {
+    "sample_size": 1565,
+    "device": "/gpu:0",
+}
+
+oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
+# TODO deal with different input sizes
+# rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230509/wavenet/classification/last/one_hot/ppg_filter/'
+rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
+
+
+one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
+print(tf.config.list_physical_devices())
+with one_device_strategy.scope():
+    oracle_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+    latest = tf.train.latest_checkpoint(oracle_model_path)
+    oracle_model.load_weights(latest)
+    rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+    latest = tf.train.latest_checkpoint(rt_model_path)
+    rt_model.load_weights(latest)
+
 
 FEATURE_TYPE_MAP = {
     'sensor_readings.105.timestamp (ms)': tf.float32,
@@ -36,8 +61,33 @@ def format_input(example):
         'acc_y': acc_y,
         'acc_z': acc_z,
         'ppg': ppg,
-        'timestamp': timestamp
+        # 'timestamp': timestamp
     }
+
+
+def sample_dataset(example, training: bool):
+    offset = CONFIG['sample_size'] // 2
+    start_idx = tf.random.uniform((), minval=0,
+                                  maxval=tf.shape(example['acc_x'])[0] - (CONFIG['sample_size'] + offset) - 1,
+                                  dtype=tf.int32)
+    tf.print(start_idx)
+    def slice_column(column):
+        return column[start_idx:start_idx + CONFIG['sample_size']]
+
+    def slice_column_with_offset(column):
+        return column[start_idx + offset:start_idx + offset + CONFIG['sample_size']]
+
+    keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
+    rt_example = (apply_to_keys(keys=keys, func=slice_column))(example.copy(), training)
+    oracle_example = (apply_to_keys(keys=keys, func=slice_column_with_offset))(example.copy(), training)
+    return rt_example, oracle_example
+
+
+def predict_label(rt, oracle, training: bool):
+    feature, label = oracle
+    oracle_prediction = oracle_model(feature)
+    return rt, oracle_prediction
+
 
 
 def create_and_parse_dataset(input_files: List):
@@ -50,27 +100,29 @@ def create_and_parse_dataset(input_files: List):
     lengths = []
     for elem in parsed_dataset.as_numpy_iterator():
         # pprint(elem['timestamp'])
-        lengths.append(tf.math.reduce_max(elem['timestamp']).numpy())
+        # lengths.append(tf.math.reduce_max(elem['timestamp']).numpy())
+        break
 
     print(sum(lengths) / 25 * 40)  # 40ms (25Hz) is the sampling rate of the PPG sensor
-    for elem in parsed_dataset.take(5):
-        pprint(elem)
-        plt.plot(elem['ppg'], color='blue')
-        plt.show()
+    parsed_dataset = parsed_dataset.map(lambda x: sample_dataset(x, True))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True),
+                                                            separate_features_label(oracle, True)))
 
-    parsed_dataset = parsed_dataset.map(lambda x: separate_features_label(x, True))
-    parsed_dataset = parsed_dataset.map(lambda x, y: apply_ppg_filter(x, y, True))
-    for features, elem in parsed_dataset.take(5):
-        pprint(features)
-        plt.plot(features['ppg'], color='red')
-        plt.show()
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (apply_ppg_filter(*rt, True),
+                                                            apply_ppg_filter(*oracle, True)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
+                                                            standardize_ppg(*oracle, True)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True)))
 
-    parsed_dataset = parsed_dataset.map(lambda x, y: standardize_ppg(x, y, True))
+    for ex1, ex2 in parsed_dataset.take(1):
+        pprint(ex1)
+        pprint(ex2)
 
-    for features, elem in parsed_dataset.take(5):
-        pprint(features)
-        plt.plot(features['ppg'], color='green')
-        plt.show()
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
+
+    for ex1, ex2 in parsed_dataset.take(5):
+        pprint(ex1)
+        pprint(ex2)
 
     return parsed_dataset
 

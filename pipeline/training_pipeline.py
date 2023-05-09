@@ -18,7 +18,9 @@ from scipy.signal import butter, filtfilt
 
 TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
-CONFIG = {}
+CONFIG = {
+    "use_ppg_filter": True,
+}
 
 LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
