@@ -1,4 +1,6 @@
 import os
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from pprint import pprint
 from typing import List
 
@@ -26,10 +28,7 @@ print(tf.config.list_physical_devices())
 with one_device_strategy.scope():
     oracle_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
     latest = tf.train.latest_checkpoint(oracle_model_path)
-    oracle_model.load_weights(latest)
-    rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
-    latest = tf.train.latest_checkpoint(rt_model_path)
-    rt_model.load_weights(latest)
+    oracle_model.load_weights(latest).expect_partial()
 
 
 FEATURE_TYPE_MAP = {
@@ -70,7 +69,6 @@ def sample_dataset(example, training: bool):
     start_idx = tf.random.uniform((), minval=0,
                                   maxval=tf.shape(example['acc_x'])[0] - (CONFIG['sample_size'] + offset) - 1,
                                   dtype=tf.int32)
-    tf.print(start_idx)
     def slice_column(column):
         return column[start_idx:start_idx + CONFIG['sample_size']]
 
@@ -89,6 +87,10 @@ def predict_label(rt, oracle, training: bool):
     return rt, oracle_prediction
 
 
+def expand_features_dims(features, label, training: bool):
+    features = tf.expand_dims(features, axis=0)
+    return features, label
+
 
 def create_and_parse_dataset(input_files: List):
     raw_dataset = tf.data.TFRecordDataset(input_files)
@@ -104,6 +106,7 @@ def create_and_parse_dataset(input_files: List):
         break
 
     print(sum(lengths) / 25 * 40)  # 40ms (25Hz) is the sampling rate of the PPG sensor
+    parsed_dataset = parsed_dataset.cache().repeat()
     parsed_dataset = parsed_dataset.map(lambda x: sample_dataset(x, True))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True),
                                                             separate_features_label(oracle, True)))
@@ -113,13 +116,18 @@ def create_and_parse_dataset(input_files: List):
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
                                                             standardize_ppg(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, expand_features_dims(*oracle, True)))
 
     for ex1, ex2 in parsed_dataset.take(1):
         pprint(ex1)
         pprint(ex2)
 
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
-
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (join_features(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (expand_features_dims(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (rt[0], oracle_pred))
+    # TODO how to keep actual label besides predicted label?
+    # parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(rt, oracle_pred, True)))
     for ex1, ex2 in parsed_dataset.take(5):
         pprint(ex1)
         pprint(ex2)
@@ -143,4 +151,20 @@ def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.
     return train_dataset, test_dataset
 
 
-load_new_user_data()
+if __name__ == '__main__':
+    train_ds, test_ds = load_new_user_data()
+
+    with one_device_strategy.scope():
+        rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+        latest = tf.train.latest_checkpoint(rt_model_path)
+        rt_model.load_weights(latest).expect_partial()
+
+    print(rt_model.summary())
+    # freeze layers
+    for i, layer in enumerate(rt_model.layers):
+        if i < 43:
+            layer.trainable = False
+        else:
+            layer.trainable = True
+
+    rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100)
