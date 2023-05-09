@@ -1,5 +1,6 @@
 import os
 from pprint import pprint
+from typing import List
 
 import tensorflow as tf
 from matplotlib import pyplot as plt
@@ -28,23 +29,30 @@ def format_input(example):
     ppg = (example['sensor_readings.105.slot1.pd1'] +
            example['sensor_readings.105.slot1.pd2'] +
            example['sensor_readings.105.slot1.pd3']) / 3
+    timestamp = example['sensor_readings.105.timestamp (ms)']
     return {
         'heart_rate': heart_rate,
         'acc_x': acc_x,
         'acc_y': acc_y,
         'acc_z': acc_z,
         'ppg': ppg,
+        'timestamp': timestamp
     }
 
 
-def load_new_user_data(data_dir: str = '../data/new_user'):
-    tfrecord_paths = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.tfrecords')]
-    raw_dataset = tf.data.TFRecordDataset(tfrecord_paths)
+def create_and_parse_dataset(input_files: List):
+    raw_dataset = tf.data.TFRecordDataset(input_files)
 
     parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
     parsed_dataset = parsed_dataset.map(
         lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
     parsed_dataset = parsed_dataset.map(format_input)
+    lengths = []
+    for elem in parsed_dataset.as_numpy_iterator():
+        # pprint(elem['timestamp'])
+        lengths.append(tf.math.reduce_max(elem['timestamp']).numpy())
+
+    print(sum(lengths) / 25 * 40)  # 40ms (25Hz) is the sampling rate of the PPG sensor
     for elem in parsed_dataset.take(5):
         pprint(elem)
         plt.plot(elem['ppg'], color='blue')
@@ -65,3 +73,22 @@ def load_new_user_data(data_dir: str = '../data/new_user'):
         plt.show()
 
     return parsed_dataset
+
+
+def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.2):
+    tfrecord_paths = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.tfrecords')]
+
+    train_paths = tfrecord_paths[:int(len(tfrecord_paths) * (1 - test_size))]
+    test_paths = tfrecord_paths[int(len(tfrecord_paths) * (1 - test_size)):]
+
+    train_dataset = create_and_parse_dataset(train_paths)
+    test_dataset = create_and_parse_dataset(test_paths)
+
+    # for elem in train_dataset.as_numpy_iterator():
+    #     pprint(elem)
+    #     print(tf.math.reduce_min(elem['ppg']).numpy(), tf.math.reduce_max(elem['ppg']).numpy())
+    #     break
+    return train_dataset, test_dataset
+
+
+load_new_user_data()

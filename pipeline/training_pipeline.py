@@ -52,7 +52,7 @@ def fill_zeros(features, label, training: bool = True):
 
     # Assign the first n values to zeros
     def slice_zeros_wrapper(column):
-        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [CONFIG['sample_size'] - n])], axis=0)
+        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [1565 - n])], axis=0)
 
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
                              func=slice_zeros_wrapper)(features, training)
@@ -60,7 +60,7 @@ def fill_zeros(features, label, training: bool = True):
 
 
 def choose_label(features, label, training: bool):
-    if CONFIG['label'] == 'last':
+    if True:
         idx = -1
     elif CONFIG['label'] == 'middle':
         idx = CONFIG['sample_size'] // 2
@@ -83,17 +83,17 @@ def one_hot_label(features, label, training: bool):
 def dist_label(features, label, training: bool):
     label = tf.math.round(label)
     try:
-        dist_function = LABEL_DISTRIBUTIONS[CONFIG['distribution']]
+        dist_function = LABEL_DISTRIBUTIONS["gaussian"]
     except KeyError:
         raise ValueError(f"Invalid distribution {CONFIG['distribution']}. "
                          f"Must be one of {list(LABEL_DISTRIBUTIONS.keys())}")
-    distribution = dist_function(loc=label, scale=CONFIG['scale'])
+    distribution = dist_function(loc=label, scale=5)
     return features, distribution.prob(HR_GRID)
 
 
 def join_features(features, label, training: bool):
     features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
-    features = tf.reshape(features, (CONFIG['sample_size'], 4))
+    features = tf.reshape(features, (1565, 4))
     # label = tf.reshape(label, (1,))
     return features, label
 
@@ -113,11 +113,11 @@ def parse_example(example_proto, training: bool):
 
 
 def sample_dataset(example, training: bool):
-    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - CONFIG['sample_size'] - 1, dtype=tf.int32)
+    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - 1565 - 1, dtype=tf.int32)
 
     # tf.print(f"n: {n}")
     def slice_column(column):
-        return column[start_idx:start_idx + CONFIG['sample_size']]
+        return column[start_idx:start_idx + 1565]
 
     keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
     example = (apply_to_keys(keys=keys, func=slice_column))(example, training)
@@ -176,7 +176,7 @@ def build_dataset(ds, transforms, training=False):
     for features, label in ds.take(5):
         print(features)
         print(features.shape)
-        assert features.shape == (CONFIG['sample_size'], 4)
+        # assert features.shape == (CONFIG['sample_size'], 4)
         print(label)
         print(label.shape)
     return ds

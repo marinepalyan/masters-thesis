@@ -1,0 +1,13 @@
+{
+  "scale": 5,
+  "epochs": 150,
+  "model_name": "tcn",
+  "model_type": "classification",
+  "batch_size": 32,
+  "steps_per_epoch": 200,
+  "validation_steps": 50,
+  "distribution": "gaussian",
+  "sample_size": 1565,
+  "label": "last",
+  "patience": 5
+}
