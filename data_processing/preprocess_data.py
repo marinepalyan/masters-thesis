@@ -2,7 +2,9 @@ import argparse
 import logging
 import os
 import pickle
+from typing import Sequence
 
+import numpy as np
 import pandas as pd
 import tensorflow as tf
 
@@ -16,19 +18,18 @@ RESAMPLING_SR = 25  # Use 25Hz as the sampling rate
 TOTAL_NUM_OF_USERS = 15
 
 
-def resample(df: pd.DataFrame, new_sr: int, method: str = "linear") -> pd.DataFrame:
+def resample(df: pd.DataFrame, new_sr: int) -> pd.DataFrame:
     """Resample and linearly interpolate the data to the new sampling rate.
 
     Args:
         df: dataframe with timestamp as index
         new_sr: new sampling rate
-        method: interpolation method
 
     Returns:
         resampled dataframe
     """
     # Resample
-    df = df.resample(f"{1 / new_sr}S").interpolate(method=method).dropna()
+    df = df.resample(f"{1 / new_sr}S").min()
     return df
 
 
@@ -48,7 +49,7 @@ def save_tfrecord(data: pd.DataFrame, tfrecord_path: str) -> None:
                     "acc_y": tf.train.Feature(float_list=tf.train.FloatList(value=data["acc_y"].values)),
                     "acc_z": tf.train.Feature(float_list=tf.train.FloatList(value=data["acc_z"].values)),
                     "ppg": tf.train.Feature(float_list=tf.train.FloatList(value=data["ppg"].values)),
-                    "activity": tf.train.Feature(int64_list=tf.train.Int64List(value=data["activity"].values)),
+                    # "activity": tf.train.Feature(int64_list=tf.train.Int64List(value=data["activity"].values)),
                     "heart_rate": tf.train.Feature(float_list=tf.train.FloatList(value=data["label"].values)),
                 }
             )
@@ -106,21 +107,27 @@ def preprocess_user_data(user_no: int, output_dir: str) -> None:
     activity.set_index("timestamp", inplace=True)
 
     # Resample the data
+    # from matplotlib import pyplot as plt
+    # plt.plot(label, label='before')
     acc_df = resample(acc_df, RESAMPLING_SR)
     ppg_df = resample(ppg_df, RESAMPLING_SR)
     hr_df = resample(label, RESAMPLING_SR)
-    activity_df = resample(activity, RESAMPLING_SR, method="nearest").astype(int)
+    hr_df = hr_df.interpolate(method='linear')
+    # plt.plot(ppg_df, label='after')
+    # plt.legend()
+    # plt.show()
+    # activity_df = resample(activity, RESAMPLING_SR, method="nearest").astype(int)
 
     # Take data points only with these timestamps
-    min_sample_time = min(acc_df.index[-1], ppg_df.index[-1], hr_df.index[-1], activity_df.index[-1])
+    min_sample_time = min(acc_df.index[-1], ppg_df.index[-1], hr_df.index[-1])
     acc_df = acc_df[:min_sample_time]
     ppg_df = ppg_df[:min_sample_time]
     hr_df = hr_df[:min_sample_time]
-    activity_df = activity_df[:min_sample_time]
-    assert len(acc_df) == len(ppg_df) == len(hr_df) == len(activity_df)
+    # activity_df = activity_df[:min_sample_time]
+    assert len(acc_df) == len(ppg_df) == len(hr_df)
 
     # join the data
-    data = pd.concat([acc_df, ppg_df, hr_df, activity_df], axis=1)
+    data = pd.concat([acc_df, ppg_df, hr_df], axis=1)
     save_output(data, output_dir)
 
 
@@ -132,3 +139,25 @@ if __name__ == '__main__':
     for user_no in args.users:
         logger.info(f"Processing user {user_no}...")
         preprocess_user_data(user_no, args.output_dir)
+
+
+def variance_from_distribution(weights: np.ndarray, values: Sequence[float]):
+    """
+    Returns variance calculated from distribution weights and values.
+
+    Args:
+      weights: A matrix of distributions of shape (dim_1, ..., dim_n, weights),
+        where the variances are computed for the weights over the last dimension
+        matching with the values.
+      values: The values corresponding to the weights in the last dimension of
+        the weights matrix. The length of this array has to be the same as the
+        last dimension of the weights matrix.
+
+    Returns:
+      A matrix of variances of shape (dim_1, ..., dim_n).
+    """
+    vals_with_shape = np.zeros(weights.shape) + values
+    average = np.average(vals_with_shape, weights=weights, axis=-1)
+    average = np.expand_dims(average, -1)
+    variance = np.average((vals_with_shape - average) ** 2, weights=weights, axis=-1)
+    return variance

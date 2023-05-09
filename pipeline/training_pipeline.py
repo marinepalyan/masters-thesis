@@ -8,10 +8,12 @@ import keras
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from matplotlib import pyplot as plt
 
 import itertools
 from datetime import datetime
 from models import get_model, MODELS
+from scipy.signal import butter, filtfilt
 
 
 TOTAL_NUM_OF_USERS = 15
@@ -22,7 +24,6 @@ LABEL_DISTRIBUTIONS = {
     'gaussian': tfp.distributions.Normal,
     'cauchy': tfp.distributions.Cauchy,
 }
-
 
 
 def set_config(config_file):
@@ -104,7 +105,7 @@ def parse_example(example_proto, training: bool):
         "acc_y": tf.io.VarLenFeature(tf.float32),
         "acc_z": tf.io.VarLenFeature(tf.float32),
         "ppg": tf.io.VarLenFeature(tf.float32),
-        "activity": tf.io.VarLenFeature(tf.int64),
+        # "activity": tf.io.VarLenFeature(tf.int64),
         "heart_rate": tf.io.VarLenFeature(tf.float32)
     }
     example = tf.io.parse_single_example(example_proto, feature_description)
@@ -129,15 +130,49 @@ def separate_features_label(dataset, training: bool):
     return features, label
 
 
+# noinspection PyTupleAssignmentBalance
+def apply_ppg_filter(features, label, training: bool):
+    # plt.plot(features['ppg'].as_numpy_iterator(), label='before')
+    if CONFIG['use_ppg_filter']:
+        b, a = butter(4, 0.5, 'highpass', fs=25, output='ba')
+        features['ppg'] = tf.py_function(filtfilt, [b, a, features['ppg']], tf.float32)
+    # plt.plot(features['ppg'].as_numpy_iterator())
+    # plt.legend()
+    # plt.show()
+    return features, label
+
+
+def standardize_ppg(features, label, training: bool):
+    mean, variance = tf.nn.moments(features['ppg'], axes=[0])
+    std = tf.sqrt(variance)
+    features['ppg'] = (features['ppg'] - mean) / std
+    return features, label
+
+
 def build_dataset(ds, transforms, training=False):
     ds = ds.cache().repeat()
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
+
+    # for features, label in ds.take(10):
+    #     print(features)
+    #     print(features['ppg'].numpy().shape)
+    #     plt.plot(features['ppg'].numpy(), label='before')
+    #     features, label = apply_ppg_filter(features, label, training)
+    #     plt.plot(features['ppg'].numpy(), label='after')
+    #     plt.legend()
+    #     plt.show()
+
     for transform in transforms[1]:
         ds = ds.map(lambda x, y: transform(x, y, training=training))
-    # FIXME this is not working
-    # getting an error that the dataset is not iterable
-    # slice index -1 of dimension 0 out of bounds.
+
+        for features, label in ds.take(5):
+            print(features)
+            print(label)
+            # plt.plot(features['ppg'].numpy(), label='after')
+            # plt.legend()
+            # plt.show()
+
     for features, label in ds.take(5):
         print(features)
         print(features.shape)
@@ -154,10 +189,12 @@ def prepare_data(input_files: List, test_size: float):
     transforms = [
         [
             parse_example,
-            apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'activity', 'heart_rate'], func=tf.sparse.to_dense),
+            apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate'], func=tf.sparse.to_dense),
             sample_dataset,
             separate_features_label],
         [
+            apply_ppg_filter,
+            standardize_ppg,
             fill_zeros,
             choose_label,
             join_features
@@ -181,16 +218,21 @@ def prepare_data(input_files: List, test_size: float):
 # Define the main function
 def main(input_files: List, test_size: float):
     train_ds, test_ds = prepare_data(input_files, test_size)
-    main_work_dir = os.path.join("../logs", datetime.now().strftime("%Y%m%d"),
-                                 CONFIG['model_name'], CONFIG['model_type'], CONFIG['label'])
+    main_features = [CONFIG['model_name'], CONFIG['model_type'], CONFIG['label']]
     if CONFIG['distribution'] is not None:
-        main_work_dir = os.path.join(main_work_dir, CONFIG['distribution'])
+        main_features.append(CONFIG['distribution'])
+    if CONFIG['use_ppg_filter']:
+        main_features.append('ppg_filter')
+    main_work_dir = os.path.join("../logs", datetime.now().strftime("%Y%m%d"), *main_features)
+    
     os.makedirs(main_work_dir, exist_ok=True)
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=main_work_dir)
-    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'])
+    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'],
+                                                        start_from_epoch=50)
     input_shape = (CONFIG['sample_size'], 4)
     # Create the TensorFlow model and compile it
-    one_device_strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+    print(CONFIG['device'])
+    one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
     print(tf.config.list_physical_devices())
     with one_device_strategy.scope():
         model = get_model(CONFIG['model_name'], CONFIG['model_type'], input_shape)
@@ -198,8 +240,8 @@ def main(input_files: List, test_size: float):
     model.fit(train_ds, steps_per_epoch=CONFIG['steps_per_epoch'], epochs=CONFIG['epochs'],
                   validation_data=test_ds, validation_steps=CONFIG['validation_steps'],
                   callbacks=[tensorboard_callback, early_stop_callback])
-    save_path = os.path.join(main_work_dir,
-                             f"{CONFIG['model_name']}_{CONFIG['model_type']}_{CONFIG['distribution']}.ckpt")
+    model_name = '_'.join(main_features)
+    save_path = os.path.join(main_work_dir, f"{model_name}.ckpt")
     model.save_weights(save_path)
     # save training config in the same folder
     with open(os.path.join(main_work_dir, 'config.json'), 'w') as f:
@@ -214,7 +256,7 @@ if __name__ == '__main__':
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
     models_config = {
-        'model_type': ['regression', 'classification'],
+        'model_type': ['regression',],
         'model_name': MODELS.keys(),
         'distribution': [None, 'one_hot', 'gaussian', 'cauchy'],
         'label': ['last', 'middle']
