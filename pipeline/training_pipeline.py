@@ -80,7 +80,7 @@ def int_label(features, label, training: bool):
 def one_hot_label(features, label, training: bool):
     label = tf.math.round(label)
     label = tf.cast(label, tf.int32)
-    return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
+    return features, tf.reshape(tf.one_hot(label - HR_GRID[0], len(HR_GRID)), (1, 200))
 
 
 def dist_label(features, label, training: bool):

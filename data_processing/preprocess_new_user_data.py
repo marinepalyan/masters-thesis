@@ -129,6 +129,7 @@ def create_and_parse_dataset(input_files: List):
 
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True), oracle_pred))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
@@ -159,7 +160,7 @@ if __name__ == '__main__':
     train_ds, test_ds = load_new_user_data()
 
     with one_device_strategy.scope():
-        rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+        rt_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
         latest = tf.train.latest_checkpoint(rt_model_path)
         rt_model.load_weights(latest).expect_partial()
 
