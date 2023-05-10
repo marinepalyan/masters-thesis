@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 
 from models import get_model
 from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
-                                        standardize_ppg, join_features)
+                                        standardize_ppg, join_features, choose_label, one_hot_label)
 
 
 CONFIG = {
@@ -92,6 +92,11 @@ def expand_features_dims(features, label, training: bool):
     return features, label
 
 
+def finalize_label(rt, oracle_pred, training: bool):
+    features, label = rt
+    return features, (label, oracle_pred)
+
+
 def create_and_parse_dataset(input_files: List):
     raw_dataset = tf.data.TFRecordDataset(input_files)
 
@@ -123,11 +128,10 @@ def create_and_parse_dataset(input_files: List):
         pprint(ex2)
 
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (join_features(*rt, True), oracle_pred))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (expand_features_dims(*rt, True), oracle_pred))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (rt[0], oracle_pred))
-    # TODO how to keep actual label besides predicted label?
-    # parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(rt, oracle_pred, True)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
+    parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
+    parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
     for ex1, ex2 in parsed_dataset.take(5):
         pprint(ex1)
         pprint(ex2)

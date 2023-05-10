@@ -20,6 +20,7 @@ TOTAL_NUM_OF_USERS = 15
 HR_GRID = list(range(30, 230, 1))
 CONFIG = {
     "use_ppg_filter": True,
+    "label": "last",
 }
 
 LABEL_DISTRIBUTIONS = {
