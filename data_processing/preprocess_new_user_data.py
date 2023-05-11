@@ -147,16 +147,19 @@ def create_and_parse_dataset(input_files: List):
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True), oracle_pred))
 
     def get_std_from_distribution(label):
-        mean = np.matmul(label.numpy().squeeze(), np.arange(30, 230)) / np.sum(label.numpy().squeeze())
-        std = np.sqrt(np.matmul(np.square(np.arange(30, 230) - mean), label.numpy().squeeze()) / 1)
+        # create tensor from np.arange(30, 230)
+        dist_values = tf.constant(np.arange(30, 230), dtype=tf.float32)
+        mean = tf.reduce_sum(tf.math.multiply(dist_values, label))
+        std = tf.sqrt(tf.reduce_sum(tf.math.multiply(tf.square(dist_values - mean), label)))
         return std
     for ex1, ex2 in parsed_dataset.take(10):
+        get_std_from_distribution(tf.squeeze(ex2))
         plt.plot(ex2.numpy().squeeze())
         plt.plot(ex1[1].numpy().squeeze())
         plt.legend(['oracle', 'rt'])
-        plt.title(get_std_from_distribution(ex2))
+        plt.title(get_std_from_distribution(tf.squeeze(ex2)).numpy())
         plt.show()
-    parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: get_std_from_distribution(oracle_pred) <= 5)
+    parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: get_std_from_distribution(oracle_pred) <= 2.5)
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
     # parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
