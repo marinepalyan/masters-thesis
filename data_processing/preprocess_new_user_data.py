@@ -1,5 +1,10 @@
 import os
 
+import keras
+
+from metrics.weighted_mae import WeightedMAE
+from metrics.weighted_mse import WeightedMSE
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from pprint import pprint
 from typing import List
@@ -19,6 +24,7 @@ CONFIG = {
     "sample_size": 1565,
     "device": "/gpu:0",
     "use_augmentation": True,
+    "patience": 10,
 }
 
 oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
@@ -125,7 +131,7 @@ def create_and_parse_dataset(input_files: List, training: bool):
                                                             apply_ppg_filter(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
                                                             standardize_ppg(*oracle, True)))
-    if CONFIG['fill_zeros']:
+    if CONFIG['use_augmentation']:
         parsed_dataset = parsed_dataset.map(lambda rt, oracle: (fill_zeros(*rt, training), oracle))
     # for rt, oracle in parsed_dataset.take(5):
     #     from matplotlib import pyplot as plt
@@ -199,6 +205,10 @@ if __name__ == '__main__':
         latest = tf.train.latest_checkpoint(rt_model_path)
         rt_model.load_weights(latest).expect_partial()
 
+        oracle_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
+        latest = tf.train.latest_checkpoint(oracle_model_path)
+        oracle_model.load_weights(latest).expect_partial()
+
     print(rt_model.summary())
     print("Evaluating Oracle Model")
     oracle_model.evaluate(validation_ds)
@@ -211,10 +221,12 @@ if __name__ == '__main__':
             layer.trainable = False
         else:
             layer.trainable = True
-    # TODO add early stop callback
-    # TODO add tensorboard callback
     # Evaluate regular models separately, then retrained one
-    rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100)
+    tensorboard_callback = keras.callbacks.TensorBoard(log_dir="../logs/personalization/")
+    early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'],
+                                                        start_from_epoch=20)
+    rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100,
+                 callbacks=[tensorboard_callback, early_stop_callback])
     rt_model.save_weights(os.path.join(rt_model_path, 'retrained_model.h5'))
     print("Evaluating Retrained RT Model")
     rt_model.evaluate(validation_ds)
