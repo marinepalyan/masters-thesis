@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from metrics.weighted_mae import WeightedMAE
 from metrics.weighted_mse import WeightedMSE
-from metrics.two_label_loss import TwoLabelLoss
+from metrics.two_label_loss import my_loss_fn
 from metrics.two_label_weighted_mae import TwoLabelWeightedMAE
 from .dense import get_dense_model
 from .tcn import get_tcn_model
@@ -39,8 +39,8 @@ def get_model(model_name: str, model_type: str, input_shape: Tuple[int, int],
         'personalization': {
             'num_of_classes': 200,
             'output_activation': 'softmax',
-            # 'loss': TwoLabelLoss(),
-            'loss': 'categorical_crossentropy',
+            'loss': my_loss_fn,
+            # 'loss': 'categorical_crossentropy',
             'metrics': [TwoLabelWeightedMAE()]
         }
     }

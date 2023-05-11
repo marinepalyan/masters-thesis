@@ -70,7 +70,7 @@ def choose_label(features, label, training: bool):
     elif isinstance(CONFIG['label'], int):
         # If the label is a percentage, then choose the label at that percentile
         idx = int(CONFIG['sample_size'] * int(CONFIG['label']) / 100)
-    return features, label['heart_rate'][idx]
+    return features, label['heart_rate'][idx] - 30
 
 
 def int_label(features, label, training: bool):

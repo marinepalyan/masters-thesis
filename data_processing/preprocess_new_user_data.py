@@ -20,7 +20,7 @@ CONFIG = {
 oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
 # TODO deal with different input sizes
 # rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230509/wavenet/classification/last/one_hot/ppg_filter/'
-rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
+rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/last/one_hot/ppg_filter/'
 
 
 one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
@@ -59,7 +59,7 @@ def format_input(example):
         'acc_x': acc_x,
         'acc_y': acc_y,
         'acc_z': acc_z,
-        'ppg': ppg,
+        'ppg': - ppg,
         # 'timestamp': timestamp
     }
 
@@ -94,7 +94,9 @@ def expand_features_dims(features, label, training: bool):
 
 def finalize_label(rt, oracle_pred, training: bool):
     features, label = rt
-    return features, (label, oracle_pred)
+    # join label and oracle_pred
+    new_label = tf.concat([label, oracle_pred], axis=0)
+    return features, new_label
 
 
 def create_and_parse_dataset(input_files: List):
@@ -105,12 +107,11 @@ def create_and_parse_dataset(input_files: List):
         lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
     parsed_dataset = parsed_dataset.map(format_input)
     lengths = []
-    for elem in parsed_dataset.as_numpy_iterator():
-        # pprint(elem['timestamp'])
-        # lengths.append(tf.math.reduce_max(elem['timestamp']).numpy())
-        break
+    # for elem in parsed_dataset.as_numpy_iterator():
+    #     lengths.append(len(elem['acc_x']))
+    #     # break
 
-    print(sum(lengths) / 25 * 40)  # 40ms (25Hz) is the sampling rate of the PPG sensor
+    # print(sum(lengths) / (25 * 3600)) # 16.733533333333334 hours (44 minutes)
     parsed_dataset = parsed_dataset.cache().repeat()
     parsed_dataset = parsed_dataset.map(lambda x: sample_dataset(x, True))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True),
@@ -120,6 +121,12 @@ def create_and_parse_dataset(input_files: List):
                                                             apply_ppg_filter(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
                                                             standardize_ppg(*oracle, True)))
+    # for rt, oracle in parsed_dataset.take(5):
+    #     from matplotlib import pyplot as plt
+    #     plt.plot(rt[0]['ppg'])
+    #     plt.plot(oracle[0]['ppg'])
+    #     plt.legend(['rt', 'oracle'])
+    #     plt.show()
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, expand_features_dims(*oracle, True)))
 
@@ -128,15 +135,29 @@ def create_and_parse_dataset(input_files: List):
         pprint(ex2)
 
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
+    # for ex1, ex2 in parsed_dataset.take(5):
+    #     print(ex2.numpy().squeeze())
+    #     print(ex1[1].numpy().squeeze())
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True), oracle_pred))
+    for ex1, ex2 in parsed_dataset.take(5):
+        print(ex2.numpy().squeeze())
+        print(ex1[1].numpy().squeeze())
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: tf.math.reduce_std(oracle_pred) >= 0.02)
+    for ex1, ex2 in parsed_dataset.take(10):
+        from matplotlib import pyplot as plt
+        plt.plot(ex2.numpy().squeeze())
+        plt.plot(ex1[1].numpy().squeeze())
+        plt.legend(['oracle', 'rt'])
+        plt.title(tf.math.reduce_std(ex2).numpy())
+        plt.show()
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
-    parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
+    # parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
     for ex1, ex2 in parsed_dataset.take(5):
         pprint(ex1)
         pprint(ex2)
-
+    parsed_dataset = parsed_dataset.batch(32)
     return parsed_dataset
 
 
@@ -165,9 +186,10 @@ if __name__ == '__main__':
         rt_model.load_weights(latest).expect_partial()
 
     print(rt_model.summary())
-    # freeze layers
+    rt_model.evaluate(test_ds, steps=100)
+    # freeze layers until tcn_3_conv
     for i, layer in enumerate(rt_model.layers):
-        if i < 43:
+        if i < 51:
             layer.trainable = False
         else:
             layer.trainable = True
