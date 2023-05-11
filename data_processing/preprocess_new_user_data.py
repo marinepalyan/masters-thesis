@@ -11,12 +11,14 @@ import numpy as np
 
 from models import get_model
 from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
-                                        standardize_ppg, join_features, choose_label, one_hot_label)
+                                        standardize_ppg, join_features, choose_label, one_hot_label,
+                                        fill_zeros)
 
 
 CONFIG = {
     "sample_size": 1565,
     "device": "/gpu:0",
+    "use_augmentation": True,
 }
 
 oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
@@ -101,7 +103,7 @@ def finalize_label(rt, oracle_pred, training: bool):
     return features, new_label
 
 
-def create_and_parse_dataset(input_files: List):
+def create_and_parse_dataset(input_files: List, training: bool):
     raw_dataset = tf.data.TFRecordDataset(input_files)
 
     parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
@@ -123,6 +125,8 @@ def create_and_parse_dataset(input_files: List):
                                                             apply_ppg_filter(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
                                                             standardize_ppg(*oracle, True)))
+    if CONFIG['fill_zeros']:
+        parsed_dataset = parsed_dataset.map(lambda rt, oracle: (fill_zeros(*rt, training), oracle))
     # for rt, oracle in parsed_dataset.take(5):
     #     from matplotlib import pyplot as plt
     #     plt.plot(rt[0]['ppg'])
@@ -176,8 +180,8 @@ def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.
     train_paths = tfrecord_paths[:int(len(tfrecord_paths) * (1 - test_size))]
     test_paths = tfrecord_paths[int(len(tfrecord_paths) * (1 - test_size)):]
 
-    train_dataset = create_and_parse_dataset(train_paths)
-    test_dataset = create_and_parse_dataset(test_paths)
+    train_dataset = create_and_parse_dataset(train_paths, True)
+    test_dataset = create_and_parse_dataset(test_paths, False)
 
     # for elem in train_dataset.as_numpy_iterator():
     #     pprint(elem)
@@ -207,7 +211,6 @@ if __name__ == '__main__':
             layer.trainable = False
         else:
             layer.trainable = True
-    # TODO add fill zeros
     # TODO add early stop callback
     # TODO add tensorboard callback
     # Evaluate regular models separately, then retrained one
