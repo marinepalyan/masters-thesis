@@ -7,6 +7,8 @@ from typing import List
 import tensorflow as tf
 from matplotlib import pyplot as plt
 
+import numpy as np
+
 from models import get_model
 from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
                                         standardize_ppg, join_features, choose_label, one_hot_label)
@@ -143,14 +145,18 @@ def create_and_parse_dataset(input_files: List):
         print(ex2.numpy().squeeze())
         print(ex1[1].numpy().squeeze())
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True), oracle_pred))
-    parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: tf.math.reduce_std(oracle_pred) >= 0.02)
+
+    def get_std_from_distribution(label):
+        mean = np.matmul(label.numpy().squeeze(), np.arange(30, 230)) / np.sum(label.numpy().squeeze())
+        std = np.sqrt(np.matmul(np.square(np.arange(30, 230) - mean), label.numpy().squeeze()) / 1)
+        return std
     for ex1, ex2 in parsed_dataset.take(10):
-        from matplotlib import pyplot as plt
         plt.plot(ex2.numpy().squeeze())
         plt.plot(ex1[1].numpy().squeeze())
         plt.legend(['oracle', 'rt'])
-        plt.title(tf.math.reduce_std(ex2).numpy())
+        plt.title(get_std_from_distribution(ex2))
         plt.show()
+    parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: get_std_from_distribution(oracle_pred) <= 5)
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
     # parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
@@ -193,5 +199,9 @@ if __name__ == '__main__':
             layer.trainable = False
         else:
             layer.trainable = True
-
+    # TODO add fill zeros
+    # TODO add early stop callback
+    # TODO add tensorboard callback
+    # TODO have a specific validation dataset
+    # Evaluate regular models separately, then retrained one
     rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100)
