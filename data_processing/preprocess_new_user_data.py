@@ -188,6 +188,7 @@ def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.
 
 if __name__ == '__main__':
     train_ds, test_ds = load_new_user_data()
+    validation_ds = test_ds.take(100)
 
     with one_device_strategy.scope():
         rt_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
@@ -195,7 +196,11 @@ if __name__ == '__main__':
         rt_model.load_weights(latest).expect_partial()
 
     print(rt_model.summary())
-    rt_model.evaluate(test_ds, steps=100)
+    print("Evaluating Oracle Model")
+    oracle_model.evaluate(validation_ds)
+    print("Evaluating RT Model")
+    rt_model.evaluate(validation_ds)
+    print("Retraining RT Model")
     # freeze layers until tcn_3_conv
     for i, layer in enumerate(rt_model.layers):
         if i < 51:
@@ -205,6 +210,8 @@ if __name__ == '__main__':
     # TODO add fill zeros
     # TODO add early stop callback
     # TODO add tensorboard callback
-    # TODO have a specific validation dataset
     # Evaluate regular models separately, then retrained one
     rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100)
+    rt_model.save_weights(os.path.join(rt_model_path, 'retrained_model.h5'))
+    print("Evaluating Retrained RT Model")
+    rt_model.evaluate(validation_ds)
