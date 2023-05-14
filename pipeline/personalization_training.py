@@ -23,6 +23,8 @@ CONFIG = {
     "choose_label": "last",
     "std_threshold": 2.5,
     "batch_size": 32,
+    "model_type": "classification",
+    "distribution": "one_hot",
 }
 models_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification'
 oracle_model_path = f'{models_path}/middle/one_hot/ppg_filter/'
@@ -102,7 +104,7 @@ def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.
 if __name__ == '__main__':
     new_train_ds, new_test_ds = load_new_user_data()
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(13, 16)]
-    train_ds, test_ds = prepare_data(input_files, 0.33)
+    train_ds, test_ds = prepare_data(input_files, 0.33, **CONFIG)
     validation_ds = test_ds.take(100)
 
     with one_device_strategy.scope():

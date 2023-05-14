@@ -57,7 +57,7 @@ def fill_zeros(features, label, training: bool = True, **CONFIG):
 
     # Assign the first n values to zeros
     def slice_zeros_wrapper(column):
-        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [1565 - n])], axis=0)
+        return tf.concat([tf.zeros([n]), tf.slice(column, [n], [CONFIG['sample_size'] - n])], axis=0)
 
     features = apply_to_keys(keys=['acc_x', 'acc_y', 'acc_z', 'ppg'],
                              func=slice_zeros_wrapper)(features, training)
@@ -99,7 +99,7 @@ def dist_label(features, label, training: bool, **CONFIG):
 
 def join_features(features, label, training: bool, **CONFIG):
     features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
-    features = tf.reshape(features, (1565, 4))
+    features = tf.reshape(features, (CONFIG['sample_size'], 4))
     # label = tf.reshape(label, (1,))
     return features, label
 
@@ -119,11 +119,11 @@ def parse_example(example_proto, training: bool, **CONFIG):
 
 
 def sample_dataset(example, training: bool, **CONFIG):
-    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - 1565 - 1, dtype=tf.int32)
+    start_idx = tf.random.uniform((), minval=0, maxval=tf.shape(example['acc_x'])[0] - CONFIG['sample_size'] - 1, dtype=tf.int32)
 
     # tf.print(f"n: {n}")
     def slice_column(column):
-        return column[start_idx:start_idx + 1565]
+        return column[start_idx:start_idx + CONFIG['sample_size']]
 
     keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
     example = (apply_to_keys(keys=keys, func=slice_column))(example, training)

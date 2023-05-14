@@ -26,7 +26,7 @@ def set_config(config_file):
         CONFIG = json.load(f)
 
 
-def build_dataset(ds, transforms, training=False):
+def build_dataset(ds, transforms, training=False, **CONFIG):
     ds = ds.cache().repeat()
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training, **CONFIG))
@@ -37,7 +37,7 @@ def build_dataset(ds, transforms, training=False):
     return ds
 
 
-def prepare_data(input_files: List, test_size: float):
+def prepare_data(input_files: List, test_size: float, **CONFIG):
     test_users_size = 1
     train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
     test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
@@ -62,8 +62,8 @@ def prepare_data(input_files: List, test_size: float):
             transforms[1].append(one_hot_label)
         else:
             transforms[1].append(dist_label)
-    train_ds = build_dataset(train_dataset, transforms, training=True)
-    test_ds = build_dataset(test_dataset, transforms, training=False)
+    train_ds = build_dataset(train_dataset, transforms, training=True, **CONFIG)
+    test_ds = build_dataset(test_dataset, transforms, training=False, **CONFIG)
 
     train_ds = train_ds.shuffle(100).batch(32)
     test_ds = test_ds.batch(32)
