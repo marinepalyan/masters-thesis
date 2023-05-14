@@ -8,7 +8,7 @@
   "validation_steps": 100,
   "distribution": "cauchy",
   "sample_size": 1500,
-  "label": "last",
+  "choose_label": "last",
   "patience": 10,
   "use_ppg_filter": true,
   "device": "/gpu:1"

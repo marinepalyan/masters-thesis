@@ -8,6 +8,6 @@
   "validation_steps": 50,
   "distribution": "gaussian",
   "sample_size": 1565,
-  "label": "last",
+  "choose_label": "last",
   "patience": 5
 }

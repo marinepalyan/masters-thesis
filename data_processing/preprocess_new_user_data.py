@@ -10,15 +10,16 @@ import tensorflow as tf
 import numpy as np
 
 from models import get_model
-from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
-                                        standardize_ppg, join_features, choose_label, one_hot_label,
-                                        fill_zeros, prepare_data)
+from pipeline.training_pipeline import prepare_data
+from pipeline.transforms import *
 
 CONFIG = {
     "sample_size": 1565,
     "device": "/gpu:0",
     "use_augmentation": True,
     "patience": 10,
+    "use_ppg_filter": True,
+    "choose_label": "last",
 }
 
 oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
@@ -33,6 +34,9 @@ with one_device_strategy.scope():
     rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
     latest = tf.train.latest_checkpoint(rt_model_path)
     rt_model.load_weights(latest).expect_partial()
+
+CONFIG['oracle_model'] = oracle_model
+CONFIG['rt_model'] = rt_model
 
 FEATURE_TYPE_MAP = {
     'sensor_readings.105.timestamp (ms)': tf.float32,
@@ -67,73 +71,37 @@ def format_input(example):
     }
 
 
-def sample_dataset(example, training: bool):
-    offset = CONFIG['sample_size'] // 2
-    start_idx = tf.random.uniform((), minval=0,
-                                  maxval=tf.shape(example['acc_x'])[0] - (CONFIG['sample_size'] + offset) - 1,
-                                  dtype=tf.int32)
-
-    def slice_column(column):
-        return column[start_idx:start_idx + CONFIG['sample_size']]
-
-    def slice_column_with_offset(column):
-        return column[start_idx + offset:start_idx + offset + CONFIG['sample_size']]
-
-    keys = ['acc_x', 'acc_y', 'acc_z', 'ppg', 'heart_rate']
-    rt_example = (apply_to_keys(keys=keys, func=slice_column))(example.copy(), training)
-    oracle_example = (apply_to_keys(keys=keys, func=slice_column_with_offset))(example.copy(), training)
-    return rt_example, oracle_example
-
-
-def predict_label(rt, oracle, training: bool):
-    feature, label = oracle
-    oracle_prediction = oracle_model(feature)
-    return rt, oracle_prediction
-
-
-def expand_features_dims(features, label, training: bool):
-    features = tf.expand_dims(features, axis=0)
-    return features, label
-
-
-def finalize_label(rt, oracle_pred, training: bool):
-    features, label = rt
-    label = tf.reshape(label, (1, 200))
-    # join label and oracle_pred
-    new_label = tf.concat([label, oracle_pred], axis=0)
-    return features, new_label
-
-
 def create_and_parse_dataset(input_files: List, training: bool):
     raw_dataset = tf.data.TFRecordDataset(input_files)
 
     parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
     parsed_dataset = parsed_dataset.map(
-        lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
+        lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True, **CONFIG))
     parsed_dataset = parsed_dataset.map(format_input)
     lengths = []
     # for elem in parsed_dataset.as_numpy_iterator():
     #     lengths.append(len(elem['acc_x']))
     #     # break
     # print(sum(lengths) / (25 * 3600)) # 16.733533333333334 hours (44 minutes)
-    parsed_dataset = parsed_dataset.cache().repeat()
-    parsed_dataset = parsed_dataset.map(lambda x: sample_dataset(x, True))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True),
-                                                            separate_features_label(oracle, True)))
 
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (apply_ppg_filter(*rt, True),
-                                                            apply_ppg_filter(*oracle, True)))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True),
-                                                            standardize_ppg(*oracle, True)))
+    parsed_dataset = parsed_dataset.cache().repeat()
+    parsed_dataset = parsed_dataset.map(lambda x: double_sample_dataset(x, True, **CONFIG))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True, **CONFIG),
+                                                            separate_features_label(oracle, True, **CONFIG)))
+
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (apply_ppg_filter(*rt, True, **CONFIG),
+                                                            apply_ppg_filter(*oracle, True, **CONFIG)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (standardize_ppg(*rt, True, **CONFIG),
+                                                            standardize_ppg(*oracle, True, **CONFIG)))
     if CONFIG['use_augmentation']:
         parsed_dataset = parsed_dataset.map(lambda rt, oracle: (fill_zeros(*rt, training), oracle))
 
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True)))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, expand_features_dims(*oracle, True)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True, **CONFIG)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, expand_features_dims(*oracle, True, **CONFIG)))
 
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True), oracle_pred))
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True, **CONFIG)))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True, **CONFIG), oracle_pred))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (one_hot_label(*rt, True, **CONFIG), oracle_pred))
 
     def get_std_from_distribution(label):
         # create tensor from np.arange(30, 230)
@@ -143,9 +111,9 @@ def create_and_parse_dataset(input_files: List, training: bool):
         return std
 
     parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: get_std_from_distribution(oracle_pred) <= 2.5)
-    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
-    parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
-    parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
+    parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True, **CONFIG))
+    parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True, **CONFIG))
+    parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True, **CONFIG))
     parsed_dataset = parsed_dataset.batch(32)
     return parsed_dataset
 
