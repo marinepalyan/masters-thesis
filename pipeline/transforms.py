@@ -31,7 +31,8 @@ __all__ = [
     'double_sample_dataset',
     'predict_label',
     'expand_features_dims',
-    'finalize_label'
+    'finalize_label',
+    'filter_by_label'
 ]
 
 
@@ -168,10 +169,9 @@ def double_sample_dataset(example, training: bool, **CONFIG):
     return rt_example, oracle_example
 
 
-def predict_label(rt, oracle, training: bool, **CONFIG):
-    feature, label = oracle
-    oracle_prediction = CONFIG['oracle_model'](feature)
-    return rt, oracle_prediction
+def predict_label(features, label, training: bool, **CONFIG):
+    oracle_prediction = CONFIG['oracle_model'](features)
+    return oracle_prediction
 
 
 def expand_features_dims(features, label, training: bool, **CONFIG):
@@ -185,3 +185,16 @@ def finalize_label(rt, oracle_pred, training: bool, **CONFIG):
     # join label and oracle_pred
     new_label = tf.concat([label, oracle_pred], axis=0)
     return features, new_label
+
+
+def get_std_from_distribution(label):
+    # create tensor from np.arange(30, 230)
+    dist_values = tf.constant(np.arange(30, 230), dtype=tf.float32)
+    mean = tf.reduce_sum(tf.math.multiply(dist_values, label))
+    std = tf.sqrt(tf.reduce_sum(tf.math.multiply(tf.square(dist_values - mean), label)))
+    return std
+
+
+def filter_by_label(label, std_threshold: float):
+    std = get_std_from_distribution(label)
+    return std < std_threshold

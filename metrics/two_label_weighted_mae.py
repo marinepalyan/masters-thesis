@@ -8,6 +8,4 @@ class TwoLabelWeightedMAE(WeightedMAE):
         super(TwoLabelWeightedMAE, self).__init__(name=name, **kwargs)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        print(y_true)
-        print(y_pred)
         return super().update_state(y_true[:, 0, :], y_pred, sample_weight=sample_weight)
