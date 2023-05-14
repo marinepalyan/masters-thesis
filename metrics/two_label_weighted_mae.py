@@ -1,4 +1,3 @@
-import tensorflow as tf
 from metrics.weighted_mae import WeightedMAE
 
 HR_GRID = list(range(30, 230, 1))

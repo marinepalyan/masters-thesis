@@ -16,4 +16,3 @@ class WeightedMAE(tf.keras.metrics.MeanMetricWrapper):
         y_true = tf.tensordot(y_true, self.averaging_weights, axes=1)
         y_pred = tf.tensordot(y_pred, self.averaging_weights, axes=1)
         return super().update_state(y_true, y_pred, sample_weight=sample_weight)
-
