@@ -138,13 +138,9 @@ def separate_features_label(dataset, training: bool):
 
 # noinspection PyTupleAssignmentBalance
 def apply_ppg_filter(features, label, training: bool):
-    # plt.plot(features['ppg'].as_numpy_iterator(), label='before')
     if CONFIG['use_ppg_filter']:
         b, a = butter(4, 0.5, 'highpass', fs=25, output='ba')
         features['ppg'] = tf.py_function(filtfilt, [b, a, features['ppg']], tf.float32)
-    # plt.plot(features['ppg'].as_numpy_iterator())
-    # plt.legend()
-    # plt.show()
     return features, label
 
 
@@ -160,45 +156,9 @@ def build_dataset(ds, transforms, training=False):
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
 
-    # for features, label in ds.take(2):
-    #     print(features)
-    #     print(features['ppg'].numpy().shape)
-    #     features, label = apply_ppg_filter(features, label, training)
-    #     features, label = standardize_ppg(features, label, training)
-    #     plt.plot(features['ppg'].numpy(), label='before augmentation')
-    #     features, label = fill_zeros(features, label, training)
-    #     plt.plot(features['ppg'].numpy(), label='after augmentation')
-    #     plt.legend()
-    #     plt.show()
-
-    # for features, label in ds.take(2):
-    #     print(features)
-    #     print(label['heart_rate'].numpy().shape)
-    #     plt.plot(label['heart_rate'].numpy())
-    #     # show point at 1565 place
-    #     plt.plot(1564, label['heart_rate'].numpy()[1564], 'o', label='real-time')
-    #     plt.plot(1565 // 2, label['heart_rate'].numpy()[1565 // 2], 'o', label='oracle')
-    #     # features, label = apply_ppg_filter(features, label, training)
-    #     # plt.plot(features['heart_rate'].numpy(), label='after')
-    #     plt.legend()
-    #     plt.show()
-
     for transform in transforms[1]:
         ds = ds.map(lambda x, y: transform(x, y, training=training))
 
-        for features, label in ds.take(5):
-            print(features)
-            print(label)
-            # plt.plot(features['ppg'].numpy(), label='after')
-            # plt.legend()
-            # plt.show()
-
-    for features, label in ds.take(5):
-        print(features)
-        # print(features.shape)
-        # assert features.shape == (CONFIG['sample_size'], 4)
-        print(label)
-        print(label.shape)
     return ds
 
 
