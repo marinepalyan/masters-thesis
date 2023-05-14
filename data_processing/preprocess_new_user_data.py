@@ -21,9 +21,11 @@ CONFIG = {
     "use_ppg_filter": True,
     "choose_label": "last",
 }
-
-oracle_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/middle/one_hot/ppg_filter/'
-rt_model_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification/last/one_hot/ppg_filter/'
+models_path = '/home/marine/learning/masters-thesis/logs/logs/20230508/tcn/classification'
+oracle_model_path = f'{models_path}/middle/one_hot/ppg_filter/'
+rt_model_path = f'{models_path}/last/one_hot/ppg_filter/'
+save_path = f'{models_path}/retrained'
+os.makedirs(save_path, exist_ok=True)
 
 one_device_strategy = tf.distribute.OneDeviceStrategy(device=CONFIG['device'])
 print(tf.config.list_physical_devices())
@@ -136,22 +138,17 @@ if __name__ == '__main__':
     validation_ds = test_ds.take(100)
 
     with one_device_strategy.scope():
-        rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+        retrain_rt_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
         latest = tf.train.latest_checkpoint(rt_model_path)
-        rt_model.load_weights(latest).expect_partial()
+        retrain_rt_model.load_weights(latest).expect_partial()
 
-        oracle_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
-        latest = tf.train.latest_checkpoint(oracle_model_path)
-        oracle_model.load_weights(latest).expect_partial()
-
-    print(rt_model.summary())
     print("Evaluating Oracle Model")
     oracle_model.evaluate(validation_ds)
     print("Evaluating RT Model")
     rt_model.evaluate(validation_ds)
     print("Retraining RT Model")
     # freeze layers until tcn_3_conv
-    for i, layer in enumerate(rt_model.layers):
+    for i, layer in enumerate(retrain_rt_model.layers):
         if i < 51:
             layer.trainable = False
         else:
@@ -160,8 +157,8 @@ if __name__ == '__main__':
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir="../logs/personalization/")
     early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'],
                                                         start_from_epoch=20)
-    rt_model.fit(train_ds, epochs=150, validation_data=test_ds, steps_per_epoch=300, validation_steps=50,
+    retrain_rt_model.fit(train_ds, epochs=150, validation_data=test_ds, steps_per_epoch=300, validation_steps=50,
                  callbacks=[tensorboard_callback, early_stop_callback])
-    rt_model.save_weights(os.path.join(rt_model_path, 'retrained_model.h5'))
+    retrain_rt_model.save_weights(os.path.join(save_path, 'retrained_model.h5'))
     print("Evaluating Retrained RT Model")
-    rt_model.evaluate(validation_ds)
+    retrain_rt_model.evaluate(validation_ds)

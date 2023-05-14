@@ -40,7 +40,6 @@ def get_model(model_name: str, model_type: str, input_shape: Tuple[int, int],
             'num_of_classes': 200,
             'output_activation': 'softmax',
             'loss': my_loss_fn,
-            # 'loss': 'categorical_crossentropy',
             'metrics': [TwoLabelWeightedMAE()]
         }
     }
