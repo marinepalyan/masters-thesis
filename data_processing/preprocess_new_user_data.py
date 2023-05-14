@@ -1,8 +1,11 @@
 import os
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from typing import List
+
 import tensorflow as tf
 
-from pipeline.training_pipeline import apply_to_keys
+from pipeline.transforms import apply_to_keys
 
 FEATURE_TYPE_MAP = {
     'sensor_readings.105.timestamp (ms)': tf.float32,
@@ -26,32 +29,27 @@ def format_input(example):
     ppg = (example['sensor_readings.105.slot1.pd1'] +
            example['sensor_readings.105.slot1.pd2'] +
            example['sensor_readings.105.slot1.pd3']) / 3
-    # mock activity feature with all zeros
-    activity = tf.zeros_like(heart_rate)
+    timestamp = example['sensor_readings.105.timestamp (ms)']
     return {
         'heart_rate': heart_rate,
         'acc_x': acc_x,
         'acc_y': acc_y,
         'acc_z': acc_z,
-        'activity': activity,
-        'ppg': ppg,
-        'ppg1': example['sensor_readings.105.slot1.pd1'],
-        'ppg2': example['sensor_readings.105.slot1.pd2'],
-        'ppg3': example['sensor_readings.105.slot1.pd3'],
+        'ppg': - ppg,
+        # 'timestamp': timestamp
     }
 
 
-def load_new_user_data(data_dir: str = '../data/new_user'):
-    tfrecord_paths = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.tfrecords')]
-    raw_dataset = tf.data.TFRecordDataset(tfrecord_paths)
+def get_formatted_dataset(input_files: List, training: bool, **CONFIG):
+    raw_dataset = tf.data.TFRecordDataset(input_files)
 
     parsed_dataset = raw_dataset.map(lambda x: tf.io.parse_single_example(x, feature_description))
     parsed_dataset = parsed_dataset.map(
-        lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True))
+        lambda x: apply_to_keys(keys=feature_description.keys(), func=tf.sparse.to_dense)(x, True, **CONFIG))
     parsed_dataset = parsed_dataset.map(format_input)
-
+    lengths = []
     # for elem in parsed_dataset.as_numpy_iterator():
-    #     pprint(elem)
-    #     print(tf.math.reduce_min(elem['ppg']).numpy(), tf.math.reduce_max(elem['ppg']).numpy())
-    #     break
+    #     lengths.append(len(elem['acc_x']))
+    #     # break
+    # print(sum(lengths) / (25 * 3600)) # 16.733533333333334 hours (44 minutes)
     return parsed_dataset
