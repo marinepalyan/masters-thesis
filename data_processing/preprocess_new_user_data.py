@@ -17,7 +17,7 @@ import numpy as np
 from models import get_model
 from pipeline.training_pipeline import (apply_to_keys, separate_features_label, apply_ppg_filter,
                                         standardize_ppg, join_features, choose_label, one_hot_label,
-                                        fill_zeros)
+                                        fill_zeros, prepare_data)
 
 
 CONFIG = {
@@ -39,6 +39,9 @@ with one_device_strategy.scope():
     oracle_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
     latest = tf.train.latest_checkpoint(oracle_model_path)
     oracle_model.load_weights(latest).expect_partial()
+    rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
+    latest = tf.train.latest_checkpoint(rt_model_path)
+    rt_model.load_weights(latest).expect_partial()
 
 
 FEATURE_TYPE_MAP = {
@@ -104,6 +107,7 @@ def expand_features_dims(features, label, training: bool):
 
 def finalize_label(rt, oracle_pred, training: bool):
     features, label = rt
+    label = tf.reshape(label, (1, 200))
     # join label and oracle_pred
     new_label = tf.concat([label, oracle_pred], axis=0)
     return features, new_label
@@ -142,14 +146,15 @@ def create_and_parse_dataset(input_files: List, training: bool):
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, join_features(*oracle, True)))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (rt, expand_features_dims(*oracle, True)))
 
-    for ex1, ex2 in parsed_dataset.take(1):
-        pprint(ex1)
-        pprint(ex2)
 
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (predict_label(rt, oracle, True)))
-    # for ex1, ex2 in parsed_dataset.take(5):
-    #     print(ex2.numpy().squeeze())
-    #     print(ex1[1].numpy().squeeze())
+    # for ex1, ex2 in parsed_dataset.take(10):
+    #     label, pred = ex2
+    #     pred_vector = pred.numpy().squeeze()
+    #     plt.plot(label['heart_rate'].numpy().squeeze())
+    #     plt.title(f"Pred: {(pred.numpy().squeeze() * range(30, 230)).sum()}")
+    #     plt.show()
+
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: (choose_label(*rt, True), oracle_pred))
     for ex1, ex2 in parsed_dataset.take(5):
         print(ex2.numpy().squeeze())
@@ -162,17 +167,17 @@ def create_and_parse_dataset(input_files: List, training: bool):
         mean = tf.reduce_sum(tf.math.multiply(dist_values, label))
         std = tf.sqrt(tf.reduce_sum(tf.math.multiply(tf.square(dist_values - mean), label)))
         return std
-    for ex1, ex2 in parsed_dataset.take(10):
-        get_std_from_distribution(tf.squeeze(ex2))
-        plt.plot(ex2.numpy().squeeze())
-        plt.plot(ex1[1].numpy().squeeze())
-        plt.legend(['oracle', 'rt'])
-        plt.title(get_std_from_distribution(tf.squeeze(ex2)).numpy())
-        plt.show()
+    # for ex1, ex2 in parsed_dataset.take(10):
+    #     get_std_from_distribution(tf.squeeze(ex2))
+    #     plt.plot(ex2.numpy().squeeze())
+    #     plt.plot(ex1[1].numpy().squeeze())
+    #     plt.legend(['oracle', 'rt'])
+    #     plt.title(get_std_from_distribution(tf.squeeze(ex2)).numpy())
+    #     plt.show()
     parsed_dataset = parsed_dataset.filter(lambda rt, oracle_pred: get_std_from_distribution(oracle_pred) <= 2.5)
     parsed_dataset = parsed_dataset.map(lambda rt, oracle_pred: finalize_label(rt, oracle_pred, True))
     parsed_dataset = parsed_dataset.map(lambda features, label: join_features(features, label, True))
-    # parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
+    parsed_dataset = parsed_dataset.map(lambda features, label: expand_features_dims(features, label, True))
     for ex1, ex2 in parsed_dataset.take(5):
         pprint(ex1)
         pprint(ex2)
@@ -197,15 +202,42 @@ def load_new_user_data(data_dir: str = '../data/new_user', test_size: float = 0.
 
 
 if __name__ == '__main__':
-    train_ds, test_ds = load_new_user_data()
+    new_train_ds, new_test_ds = load_new_user_data()
+    input_files = [f'../data/processed/S{user}.tfrecord' for user in range(13, 16)]
+    train_ds, test_ds = prepare_data(input_files, 0.33)
+    # for features, label in new_train_ds.take(10):
+    #     pprint(features)
+    #     pprint(label)
+    #     joined_features, _ = join_features(features, label, True)
+    #     joined_features = tf.reshape(joined_features, (1, joined_features.shape[0], joined_features.shape[1]))
+    #     rt_pred = rt_model(joined_features)
+    #     plt.plot(features['acc_x'], label='acc_x')
+    #     plt.plot(features['acc_y'], label='acc_y')
+    #     plt.plot(features['acc_z'], label='acc_z')
+    #     plt.legend()
+    #     plt.title(f"New \n Label: {np.argmax(label.numpy()[0]) + 30}, prediction: {(label.numpy()[1] * np.arange(30, 230, 1)).sum()} \n"
+    #               f"RT prediction: {(rt_pred.numpy()[0] * np.arange(30, 230, 1)).sum()}")
+    #     plt.show()
+    # for features, label in train_ds.take(30):
+    #     joined_features, _ = join_features(features, label, True)
+    #     joined_features = tf.reshape(joined_features, (1, joined_features.shape[0], joined_features.shape[1]))
+    #     oracle_pred = oracle_model(joined_features)
+    #     rt_pred = rt_model(joined_features)
+    #     plt.plot(features['acc_x'], label='acc_x')
+    #     plt.plot(features['acc_y'], label='acc_y')
+    #     plt.plot(features['acc_z'], label='acc_z')
+    #     plt.legend()
+    #     plt.title(
+    #         f"Train \n Label: {np.argmax(label.numpy()) + 30}, prediction: {(rt_pred.numpy()[0] * np.arange(30, 230, 1)).sum()}")
+    #     plt.show()
     validation_ds = test_ds.take(100)
 
     with one_device_strategy.scope():
-        rt_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
+        rt_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
         latest = tf.train.latest_checkpoint(rt_model_path)
         rt_model.load_weights(latest).expect_partial()
 
-        oracle_model = get_model('tcn', 'personalization', (CONFIG['sample_size'], 4))
+        oracle_model = get_model('tcn', 'classification', (CONFIG['sample_size'], 4))
         latest = tf.train.latest_checkpoint(oracle_model_path)
         oracle_model.load_weights(latest).expect_partial()
 
@@ -225,7 +257,7 @@ if __name__ == '__main__':
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir="../logs/personalization/")
     early_stop_callback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=CONFIG['patience'],
                                                         start_from_epoch=20)
-    rt_model.fit(train_ds, epochs=100, validation_data=test_ds, steps_per_epoch=500, validation_steps=100,
+    rt_model.fit(train_ds, epochs=150, validation_data=test_ds, steps_per_epoch=300, validation_steps=50,
                  callbacks=[tensorboard_callback, early_stop_callback])
     rt_model.save_weights(os.path.join(rt_model_path, 'retrained_model.h5'))
     print("Evaluating Retrained RT Model")

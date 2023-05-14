@@ -21,6 +21,8 @@ HR_GRID = list(range(30, 230, 1))
 CONFIG = {
     "use_ppg_filter": True,
     "label": "last",
+    "model_type": "classification",
+    "distribution": "one_hot",
 }
 
 LABEL_DISTRIBUTIONS = {
@@ -70,7 +72,8 @@ def choose_label(features, label, training: bool):
     elif isinstance(CONFIG['label'], int):
         # If the label is a percentage, then choose the label at that percentile
         idx = int(CONFIG['sample_size'] * int(CONFIG['label']) / 100)
-    return features, label['heart_rate'][idx] - 30
+    # - 30
+    return features, label['heart_rate'][idx]
 
 
 def int_label(features, label, training: bool):
@@ -80,7 +83,7 @@ def int_label(features, label, training: bool):
 def one_hot_label(features, label, training: bool):
     label = tf.math.round(label)
     label = tf.cast(label, tf.int32)
-    return features, tf.reshape(tf.one_hot(label - HR_GRID[0], len(HR_GRID)), (1, 200))
+    return features, tf.one_hot(label - HR_GRID[0], len(HR_GRID))
 
 
 def dist_label(features, label, training: bool):
@@ -157,12 +160,26 @@ def build_dataset(ds, transforms, training=False):
     for transform in transforms[0]:
         ds = ds.map(lambda x: transform(x, training=training))
 
-    # for features, label in ds.take(10):
+    # for features, label in ds.take(2):
     #     print(features)
     #     print(features['ppg'].numpy().shape)
-    #     plt.plot(features['ppg'].numpy(), label='before')
     #     features, label = apply_ppg_filter(features, label, training)
-    #     plt.plot(features['ppg'].numpy(), label='after')
+    #     features, label = standardize_ppg(features, label, training)
+    #     plt.plot(features['ppg'].numpy(), label='before augmentation')
+    #     features, label = fill_zeros(features, label, training)
+    #     plt.plot(features['ppg'].numpy(), label='after augmentation')
+    #     plt.legend()
+    #     plt.show()
+
+    # for features, label in ds.take(2):
+    #     print(features)
+    #     print(label['heart_rate'].numpy().shape)
+    #     plt.plot(label['heart_rate'].numpy())
+    #     # show point at 1565 place
+    #     plt.plot(1564, label['heart_rate'].numpy()[1564], 'o', label='real-time')
+    #     plt.plot(1565 // 2, label['heart_rate'].numpy()[1565 // 2], 'o', label='oracle')
+    #     # features, label = apply_ppg_filter(features, label, training)
+    #     # plt.plot(features['heart_rate'].numpy(), label='after')
     #     plt.legend()
     #     plt.show()
 
@@ -178,7 +195,7 @@ def build_dataset(ds, transforms, training=False):
 
     for features, label in ds.take(5):
         print(features)
-        print(features.shape)
+        # print(features.shape)
         # assert features.shape == (CONFIG['sample_size'], 4)
         print(label)
         print(label.shape)
@@ -186,7 +203,7 @@ def build_dataset(ds, transforms, training=False):
 
 
 def prepare_data(input_files: List, test_size: float):
-    test_users_size = int(TOTAL_NUM_OF_USERS * test_size)
+    test_users_size = 1
     train_dataset = tf.data.TFRecordDataset(input_files[:-test_users_size])
     test_dataset = tf.data.TFRecordDataset(input_files[-test_users_size:])
     transforms = [
@@ -214,7 +231,7 @@ def prepare_data(input_files: List, test_size: float):
     test_ds = build_dataset(test_dataset, transforms, training=False)
 
     train_ds = train_ds.shuffle(100).batch(32)
-    test_ds = test_ds.batch(CONFIG['batch_size'])
+    test_ds = test_ds.batch(32)
     return train_ds, test_ds
 
 
