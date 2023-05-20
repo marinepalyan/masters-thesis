@@ -10,9 +10,9 @@ class WeightedMAE(tf.keras.metrics.MeanMetricWrapper):
         self.averaging_weights = tf.constant(HR_GRID, dtype=tf.float32)
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        y_true = tf.cast(y_true, tf.float32)
-        y_pred = tf.cast(y_pred, tf.float32)
-        y_true = tf.reshape(y_true, tf.shape(y_pred))
-        y_true = tf.tensordot(y_true, self.averaging_weights, axes=1)
-        y_pred = tf.tensordot(y_pred, self.averaging_weights, axes=1)
-        return super().update_state(y_true, y_pred, sample_weight=sample_weight)
+        y_true_float = tf.cast(y_true, tf.float32)
+        y_pred_float = tf.cast(y_pred, tf.float32)
+        y_true_reshaped = tf.reshape(y_true_float, tf.shape(y_pred_float))
+        y_true_label = tf.tensordot(y_true_reshaped, self.averaging_weights, axes=1)
+        y_pred_label = tf.tensordot(y_pred_float, self.averaging_weights, axes=1)
+        return super().update_state(y_true_label, y_pred_label, sample_weight=sample_weight)

@@ -98,10 +98,8 @@ def dist_label(features, label, training: bool, **CONFIG):
 
 
 def join_features(features, label, training: bool, **CONFIG):
-    features = tf.concat([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']], axis=0)
-    features = tf.reshape(features, (CONFIG['sample_size'], 4))
-    # label = tf.reshape(label, (1,))
-    return features, label
+    new_features = tf.transpose(tf.stack([features['acc_x'], features['acc_y'], features['acc_z'], features['ppg']]))
+    return new_features, label
 
 
 # Define a function to parse each example in the TFRecord file
@@ -171,7 +169,7 @@ def double_sample_dataset(example, training: bool, **CONFIG):
 
 def predict_label(features, label, training: bool, **CONFIG):
     oracle_prediction = CONFIG['oracle_model'](features)
-    return oracle_prediction
+    return label, oracle_prediction
 
 
 def expand_features_dims(features, label, training: bool, **CONFIG):
@@ -179,12 +177,12 @@ def expand_features_dims(features, label, training: bool, **CONFIG):
     return features, label
 
 
-def finalize_label(rt, oracle_pred, training: bool, **CONFIG):
-    features, label = rt
-    label = tf.reshape(label, (1, 200))
-    # join label and oracle_pred
-    new_label = tf.concat([label, oracle_pred], axis=0)
-    return features, new_label
+def finalize_label(rt, oracle, training: bool, **CONFIG):
+    features, _ = rt
+    or_label, or_pred = oracle
+    new_label = tf.concat([or_label, tf.squeeze(or_pred)], axis=0)
+    label_reshaped = tf.reshape(new_label, (2, 200))
+    return features, label_reshaped
 
 
 def get_std_from_distribution(label):

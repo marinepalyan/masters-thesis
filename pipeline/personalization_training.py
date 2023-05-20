@@ -8,6 +8,7 @@ from typing import List
 import tensorflow as tf
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 from models import get_model
 from pipeline.training_pipeline import prepare_data
@@ -21,8 +22,8 @@ CONFIG = {
     "patience": 10,
     "use_ppg_filter": True,
     "choose_label": "last",
-    "std_threshold": 2.5,
-    "batch_size": 32,
+    "std_threshold": 5,
+    "batch_size": 1,
     "model_type": "classification",
     "distribution": "one_hot",
 }
@@ -48,8 +49,8 @@ CONFIG['rt_model'] = rt_model
 
 def create_and_parse_dataset(input_files: List, training: bool):
     parsed_dataset = get_formatted_dataset(input_files, training, **CONFIG)
-    parsed_dataset = parsed_dataset.cache().repeat()
-
+    # parsed_dataset = parsed_dataset.take(1)
+    parsed_dataset = parsed_dataset.cache().repeat(100)
     parsed_dataset = parsed_dataset.map(lambda x: double_sample_dataset(x, True, **CONFIG))
     parsed_dataset = parsed_dataset.map(lambda rt, oracle: (separate_features_label(rt, True, **CONFIG),
                                                             separate_features_label(oracle, True, **CONFIG)))
