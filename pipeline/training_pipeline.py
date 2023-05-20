@@ -11,7 +11,8 @@ import itertools
 from datetime import datetime
 from models import get_model, MODELS
 from pipeline.transforms import *
-
+from matplotlib import pyplot as plt
+import numpy as np
 TOTAL_NUM_OF_USERS = 15
 CONFIG = {
     "use_ppg_filter": True,
@@ -72,7 +73,7 @@ def prepare_data(input_files: List, test_size: float, **CONFIG):
 
 # Define the main function
 def main(input_files: List, test_size: float):
-    train_ds, test_ds = prepare_data(input_files, test_size)
+    train_ds, test_ds = prepare_data(input_files, test_size, **CONFIG)
     main_features = [CONFIG['model_name'], CONFIG['model_type'], CONFIG['choose_label']]
     if CONFIG['distribution'] is not None:
         main_features.append(CONFIG['distribution'])
@@ -111,9 +112,9 @@ if __name__ == '__main__':
     input_files = [f'../data/processed/S{user}.tfrecord' for user in range(1, TOTAL_NUM_OF_USERS + 1)]
     set_config(args.config_path)
     models_config = {
-        'model_type': ['regression',],
-        'model_name': MODELS.keys(),
-        'distribution': [None, 'one_hot', 'gaussian', 'cauchy'],
+        'model_type': ['regression', 'classification'],
+        'model_name': ['tcn'],
+        'distribution': ['one_hot', 'gaussian', 'cauchy'],
         'choose_label': ['last', 'middle']
     }
     keys, values = zip(*models_config.items())

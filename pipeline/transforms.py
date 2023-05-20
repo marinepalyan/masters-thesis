@@ -32,7 +32,8 @@ __all__ = [
     'predict_label',
     'expand_features_dims',
     'finalize_label',
-    'filter_by_label'
+    'filter_by_label',
+    'dist_to_label'
 ]
 
 
@@ -196,3 +197,7 @@ def get_std_from_distribution(label):
 def filter_by_label(label, std_threshold: float):
     std = get_std_from_distribution(label)
     return std < std_threshold
+
+
+def dist_to_label(pred):
+    return (pred.numpy() * np.arange(30, 230, 1)).sum()
